@@ -1,2 +1,15 @@
-[2025-09-09T02:05:57.661Z] [INFO] Log file cleared
+[2025-09-09T02:32:27.585Z] [INFO] [backend] Log file cleared
+--------------------------------------------------------------------------------
+[2025-09-09T02:32:27.588Z] [INFO] [backend] Enhanced server running on http://localhost:3001
+--------------------------------------------------------------------------------
+[2025-09-09T02:32:35.570Z] [INFO] [backend] Incoming GET request to /
+--------------------------------------------------------------------------------
+[2025-09-09T02:32:35.571Z] [INFO] [backend] GET /
+Data: {
+  "method": "GET",
+  "url": "/",
+  "data": "{\"message\":\"DebateAI Enhanced Server\",\"version\":\"1.0.0\",\"endpoints\":[\"GET /api/ping - Health check\",\"POST /api/validate-topic - Validate debate topics with OpenAI\"],\"status\":\"running\",\"features\":[\"OpenAI Integration\",\"Advanced Logging\"]}",
+  "duration": "1ms",
+  "timestamp": "2025-09-09T02:32:35.571Z"
+}
 --------------------------------------------------------------------------------
