@@ -1,6 +1,6 @@
 export class DebateManager {
     private wordCap: number;
-    private arguments: { [key: string]: string[] };
+    private arguments: { sideA: string[]; sideB: string[] };
 
     constructor(wordCap: number) {
         this.wordCap = wordCap;

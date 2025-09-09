@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-const debateManager = new DebateManager();
+const debateManager = new DebateManager(180); // Set word cap as needed
 
 app.post('/debate/submit', (req, res) => {
     const { argument, side } = req.body;
