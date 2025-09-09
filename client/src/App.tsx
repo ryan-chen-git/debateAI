@@ -14,7 +14,7 @@ function App() {
     setValidation(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/validate-topic', {
+      const res = await fetch('http://localhost:3001/api/validate-topic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: cappedTopic })
