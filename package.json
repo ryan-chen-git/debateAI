@@ -4,7 +4,11 @@
   "description": "A 1v1 debate application with an LLM judge that enforces strict word caps.",
   "main": "src/app.ts",
   "scripts": {
-    "start": "ts-node src/app.ts",
+    "start": "./start-dev.sh",
+    "start:main": "ts-node src/app.ts",
+    "stop": "pkill -f 'ts-node src/app.ts'; pkill -f 'server.*ts-node'; pkill -f 'craco start'; echo 'All servers stopped'",
+    "status": "echo '🔍 Server Status:' && (curl -s http://localhost:3000 >/dev/null && echo '✅ Main Server (3000): Running' || echo '❌ Main Server (3000): Down') && (curl -s http://localhost:3001 >/dev/null && echo '✅ Enhanced Server (3001): Running' || echo '❌ Enhanced Server (3001): Down') && (curl -s http://localhost:3002 >/dev/null && echo '✅ React Client (3002): Running' || echo '❌ React Client (3002): Down')",
+    "open": "open http://localhost:3002",
     "build": "tsc",
     "test": "jest"
   },
@@ -17,6 +21,7 @@
   "devDependencies": {
     "@types/express": "^4.17.23",
     "@types/jest": "^27.5.2",
+    "concurrently": "^9.2.1",
     "jest": "^27.5.1"
   },
   "author": "",
