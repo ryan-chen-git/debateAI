@@ -1,12 +1,85 @@
-[2025-09-09T06:40:00.978Z] [INFO] [backend] Log file cleared
+[2025-09-09T07:47:30.361Z] [INFO] [backend] Log file cleared
 --------------------------------------------------------------------------------
-[2025-09-09T06:40:00.979Z] [DEBUG] [backend] Gemini constructor called
+[2025-09-09T07:47:30.361Z] [DEBUG] [backend] Gemini constructor called
 Data: {
-  "hasApiKey": false,
-  "apiKeyPrefix": "none"
+  "hasApiKey": true,
+  "apiKeyPrefix": "AIzaSyB7iChcRlM..."
 }
 --------------------------------------------------------------------------------
-[2025-09-09T06:40:00.979Z] [WARN] [backend] No Gemini API key found - counter-arguments will use fallback
+[2025-09-09T07:47:30.362Z] [INFO] [backend] Gemini AI initialized successfully
+Data: {
+  "modelName": "gemini-1.5-flash"
+}
 --------------------------------------------------------------------------------
-[2025-09-09T06:40:00.981Z] [INFO] [backend] Unified server running on http://localhost:3000
+[2025-09-09T07:47:30.365Z] [INFO] [backend] Unified server running on http://localhost:3000
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:33.935Z] [INFO] [backend] Incoming POST request to /api/validate-topic
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:33.935Z] [DEBUG] [backend] Gemini constructor called
+Data: {
+  "hasApiKey": true,
+  "apiKeyPrefix": "AIzaSyB7iChcRlM..."
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:33.936Z] [INFO] [backend] Gemini AI initialized successfully
+Data: {
+  "modelName": "gemini-1.5-flash"
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:33.936Z] [INFO] [backend] Validating topic with Gemini
+Data: {
+  "topic": "hello..."
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:33.936Z] [DEBUG] [backend] Calling Gemini API for topic validation
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:34.994Z] [INFO] [backend] Gemini topic validation response received
+Data: {
+  "responseLength": 188,
+  "responsePreview": "```json\n{\n  \"is_valid\": false,\n  \"detected_structure\": \"unknown\",\n  \"explanation\": \"It is a fragment..."
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:34.995Z] [INFO] [backend] POST /api/validate-topic
+Data: {
+  "method": "POST",
+  "url": "/api/validate-topic",
+  "data": "{\"valid\":false,\"reason\":\"It is a fragment, not a declarative sentence.\",\"refinedTopic\":\"\",\"suggestedRewrite\":\"\",\"usedFallback\":false}",
+  "duration": "1060ms",
+  "timestamp": "2025-09-09T07:47:34.995Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:45.316Z] [INFO] [backend] Incoming POST request to /api/validate-topic
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:45.318Z] [DEBUG] [backend] Gemini constructor called
+Data: {
+  "hasApiKey": true,
+  "apiKeyPrefix": "AIzaSyB7iChcRlM..."
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:45.318Z] [INFO] [backend] Gemini AI initialized successfully
+Data: {
+  "modelName": "gemini-1.5-flash"
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:45.319Z] [INFO] [backend] Validating topic with Gemini
+Data: {
+  "topic": "schools should give out free lunch..."
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:45.319Z] [DEBUG] [backend] Calling Gemini API for topic validation
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:46.258Z] [INFO] [backend] Gemini topic validation response received
+Data: {
+  "responseLength": 190,
+  "responsePreview": "```json\n{\n  \"is_valid\": true,\n  \"detected_structure\": \"actor-should-action\",\n  \"explanation\": \"\",\n  ..."
+}
+--------------------------------------------------------------------------------
+[2025-09-09T07:47:46.259Z] [INFO] [backend] POST /api/validate-topic
+Data: {
+  "method": "POST",
+  "url": "/api/validate-topic",
+  "data": "{\"valid\":true,\"reason\":\"Valid debate topic!\",\"refinedTopic\":\"Schools should provide free lunches.\",\"suggestedRewrite\":\"\",\"usedFallback\":false}",
+  "duration": "943ms",
+  "timestamp": "2025-09-09T07:47:46.259Z"
+}
 --------------------------------------------------------------------------------

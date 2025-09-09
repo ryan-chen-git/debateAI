@@ -78,11 +78,37 @@ app.get('/api/info', (req, res) => {
         endpoints: [
             'GET /api/info - Server info',
             'GET /api/ping - Health check',
+            'POST /api/validate-topic - Validate debate topic',
             'POST /api/debate/submit - Submit debate arguments'
         ],
         status: 'running',
         features: ['Gemini AI Counter-Arguments', 'Advanced Logging', 'React Frontend', 'Unrestricted Debate Topics']
     });
+});
+
+// Topic validation endpoint
+app.post('/api/validate-topic', async (req, res) => {
+    try {
+        const { topic } = req.body;
+        
+        if (!topic || typeof topic !== 'string') {
+            return res.status(400).json({
+                valid: false,
+                reason: 'Topic is required and must be a string'
+            });
+        }
+
+        const geminiService = new GeminiService();
+        const validation = await geminiService.validateTopic(topic);
+        
+        res.json(validation);
+    } catch (error) {
+        logger.logError('backend', error as Error, { context: 'topic-validation' });
+        res.status(500).json({
+            valid: false,
+            reason: 'Server error during validation'
+        });
+    }
 });
 
 // No topic validation needed - debate anything! 🔥

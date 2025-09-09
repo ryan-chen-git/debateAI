@@ -11,7 +11,7 @@
     "start": "npm run build && node dist/unified-server.js",
     "start:server": "ts-node unified-server.ts",
     "start:dev": "npm run dev",
-    "stop": "lsof -ti:3000 | xargs kill -9 2>/dev/null || echo 'Server stopped'",
+    "stop": "npx kill-port 3000 || echo Server stopped",
     "status": "curl -s http://localhost:3000/api/ping >/dev/null && echo '✅ Server Running' || echo '❌ Server Down'",
     "open": "open http://localhost:3000",
     "clean": "rm -rf dist client/build",
@@ -37,5 +37,8 @@
     "react"
   ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "kill-port": "^2.0.1"
+  }
 }

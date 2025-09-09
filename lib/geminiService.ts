@@ -30,7 +30,13 @@ export class GeminiService {
         }
     }
 
-    async validateTopic(topic: string): Promise<{ valid: boolean; reason: string; usedFallback?: boolean }> {
+    async validateTopic(topic: string): Promise<{ 
+        valid: boolean; 
+        reason: string; 
+        refinedTopic?: string; 
+        suggestedRewrite?: string; 
+        usedFallback?: boolean 
+    }> {
         logger.log('INFO', 'backend', 'Validating topic with Gemini', { topic: topic.substring(0, 50) + '...' });
 
         // Fallback if no Gemini API
@@ -39,19 +45,55 @@ export class GeminiService {
         }
 
         try {
-            const prompt = `You are a debate topic validator. Analyze this topic and determine if it's suitable for a structured debate.
+            const prompt = `You are a debate topic validator and refiner. Given USER_INPUT, return JSON.
 
-Topic: "${topic}"
+### Rules
+Valid if:
+1. Declarative sentence (no "?").
+2. Arguable as pro/con.
+3. Fits one of:
+   A. Actor + SHOULD + Action
+   B. Concept1 + IS [comparative] + Concept2
+   C. "On balance ..." harm/benefit claim
+   D. Starts with "This House believes that"
+4. Optional: may start with "Resolved:".
 
-A good debate topic should:
-- Be controversial with valid arguments on both sides
-- Be specific enough to debate meaningfully
-- Not be a simple factual question
-- Be appropriate for civil discussion
-- Have clear pro/con positions
+Invalid if:
+- It is a question.
+- It is a fragment.
+- Too vague or not a claim.
+- Multiple unrelated claims.
 
-Reply with ONLY a JSON object in this exact format:
-{"valid": true/false, "reason": "explanation of why it is or isn't a good debate topic"}`;
+### Output JSON
+{
+  "is_valid": true|false,
+  "detected_structure": "actor-should-action" | "value-comparison" | "harm-vs-good" | "this-house-believes" | "unknown",
+  "explanation": "short reason if invalid, empty if valid",
+  "refined_version": "if valid, refined topic with spelling/grammar fixes and better phrasing; empty if invalid",
+  "suggested_rewrite": "if invalid, suggested proper version; empty if valid"
+}
+
+### Examples
+USER_INPUT: "Resolved: schools should requir uniforms"
+{
+  "is_valid": true,
+  "detected_structure": "actor-should-action",
+  "explanation": "",
+  "refined_version": "Schools should require uniforms.",
+  "suggested_rewrite": ""
+}
+
+USER_INPUT: "Should schools ban homework?"
+{
+  "is_valid": false,
+  "detected_structure": "unknown",
+  "explanation": "It is phrased as a question, not a statement.",
+  "refined_version": "",
+  "suggested_rewrite": "Schools should ban homework."
+}
+
+USER_INPUT: "${topic}"
+`;
 
             logger.log('DEBUG', 'backend', 'Calling Gemini API for topic validation');
             const result = await this.model.generateContent(prompt);
@@ -72,14 +114,15 @@ Reply with ONLY a JSON object in this exact format:
                 if (cleanedContent.includes('```')) {
                     cleanedContent = cleanedContent.replace(/```\s*/, '').replace(/\s*```$/, '');
                 }
-                
                 const parsedResult = JSON.parse(cleanedContent);
-                
-                // Validate the response structure
-                if (typeof parsedResult.valid === 'boolean' && typeof parsedResult.reason === 'string') {
+                // Map new response to frontend format
+                if (typeof parsedResult.is_valid === 'boolean') {
                     return {
-                        valid: parsedResult.valid,
-                        reason: parsedResult.reason
+                        valid: parsedResult.is_valid,
+                        reason: parsedResult.explanation || (parsedResult.is_valid ? 'Valid debate topic!' : 'Invalid topic.'),
+                        refinedTopic: parsedResult.refined_version || '',
+                        suggestedRewrite: parsedResult.suggested_rewrite || '',
+                        usedFallback: false
                     };
                 } else {
                     throw new Error('Invalid response structure from Gemini');
@@ -89,7 +132,6 @@ Reply with ONLY a JSON object in this exact format:
                     aiContent,
                     parseError: (parseError as Error).message 
                 });
-                
                 // Fallback on parse error
                 return this.generateFallbackTopicValidation(topic);
             }
