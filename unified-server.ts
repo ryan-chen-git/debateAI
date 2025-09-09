@@ -98,7 +98,6 @@ app.post('/api/validate-topic', async (req, res) => {
             });
         }
 
-        const geminiService = new GeminiService();
         const validation = await geminiService.validateTopic(topic);
         
         res.json(validation);

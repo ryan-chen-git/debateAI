@@ -30,11 +30,11 @@ unified-server (Port 3000)
 ├── 🔧 API Endpoints (/api/*)
 │   ├── /api/ping - Health check
 │   ├── /api/info - Server information
-│   ├── /api/validate-topic - OpenAI topic validation
+│   ├── /api/validate-topic - Gemini AI topic validation
 │   ├── /api/debate/submit - Submit arguments
 │   └── /api/debate/state - Get debate state
 ├── 📊 Debate Management
-├── 🤖 OpenAI Integration
+├── 🤖 Gemini AI Integration
 └── 📝 Centralized Logging
 ```
 
@@ -50,7 +50,7 @@ unified-server (Port 3000)
 
 - **Debate Management**: Manages 1v1 debate flow with word cap enforcement (180 words)
 - **AI Topic Validation**: Uses Google Gemini to validate debate topics
-- **Fallback Validation**: Works even without OpenAI API key
+- **Fallback Validation**: Works even without Gemini API key
 - **Modern React UI**: Clean, responsive interface with real-time feedback
 - **Advanced Logging**: Comprehensive request/response and error logging
 - **Gemini AI Integration**: Free credits for topic validation and counter-arguments
@@ -168,7 +168,7 @@ GET /api/debate/state
 
 1. **Port already in use**: Kill existing processes with `pkill -f 'unified-server'`
 2. **React build missing**: Run `npm run build:client`
-3. **OpenAI errors**: Set `USE_FALLBACK=true` in `.env` file
+3. **Gemini AI errors**: Set `USE_FALLBACK=true` in `.env` file
 4. **Dependencies issues**: Delete `node_modules` and run `npm install`
 
 ## 🤝 Contributing
