@@ -20,6 +20,7 @@
   },
   "scripts": {
     "start": "craco start",
+    "stop": "pkill -f 'craco start' || echo 'React client stopped'",
     "build": "craco build",
     "test": "craco test",
     "eject": "react-scripts eject"

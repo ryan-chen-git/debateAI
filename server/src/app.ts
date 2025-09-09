@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import { DebateManager } from '../../src/debate/debateManager';
@@ -8,6 +9,13 @@ dotenv.config();
 
 const app = express();
 const PORT = 3001;
+
+// Enable CORS for all routes
+app.use(cors({
+  origin: ['http://localhost:3002', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.use(express.json());
 
@@ -74,7 +82,26 @@ app.post('/api/validate-topic', async (req, res) => {
     return res.status(400).json({ valid: false, reason: 'No topic provided.' });
   }
 
+  // Check if we should use OpenAI or fallback
+  if (!process.env.OPENAI_API_KEY || process.env.USE_FALLBACK === 'true') {
+    logger.log('INFO', 'backend', 'Using fallback validation (OpenAI disabled or no credits)');
+    const fallbackResponse = {
+      valid: topic.length >= 15 && topic.includes(' '),
+      reason: topic.length >= 15 && topic.includes(' ')
+        ? `"${topic}" appears to be a valid debate topic.`
+        : `"${topic}" seems too short or simple for a debate topic. Please provide more detail.`
+    };
+    return res.json(fallbackResponse);
+  }
+
   try {
+    // Debug: Check if API key is loaded
+    logger.log('DEBUG', 'backend', 'API Key status', { 
+      hasKey: !!process.env.OPENAI_API_KEY,
+      keyLength: process.env.OPENAI_API_KEY?.length,
+      keyPrefix: process.env.OPENAI_API_KEY?.substring(0, 10)
+    });
+    
     // Call OpenAI API (replace YOUR_OPENAI_API_KEY with your actual key)
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
@@ -104,9 +131,28 @@ app.post('/api/validate-topic', async (req, res) => {
       return res.status(500).json({ valid: false, reason: 'AI response could not be parsed.' });
     }
     res.json(result);
-  } catch (err) {
+  } catch (err: any) {
     logger.logError('backend', err as Error, { context: 'validate-topic' });
-    res.status(500).json({ valid: false, reason: 'Error validating topic.' });
+    
+    // Handle specific OpenAI errors
+    if (err.response?.status === 429) {
+      logger.log('WARN', 'backend', 'OpenAI rate limit hit, using fallback validation');
+      // Fallback validation based on topic length and content
+      const fallbackResponse = {
+        valid: topic.length >= 15 && topic.includes(' '),
+        reason: topic.length >= 15 && topic.includes(' ')
+          ? `"${topic}" appears to be a valid debate topic. (OpenAI temporarily unavailable - using fallback validation)`
+          : `"${topic}" seems too short or simple for a debate topic. Please provide more detail. (OpenAI temporarily unavailable)`
+      };
+      return res.json(fallbackResponse);
+    }
+    
+    if (err.response?.status === 401) {
+      logger.log('ERROR', 'backend', 'OpenAI API key invalid or expired');
+      return res.status(500).json({ valid: false, reason: 'API configuration error. Please check your OpenAI API key.' });
+    }
+    
+    res.status(500).json({ valid: false, reason: 'Error validating topic. Please try again.' });
   }
 });
 
