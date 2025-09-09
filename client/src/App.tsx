@@ -30,7 +30,6 @@ function App() {
     e.preventDefault();
     const cappedTopic = topic.slice(0, TOPIC_CAP);
     setSubmittedTopic(cappedTopic);
-    setValidation(null);
     
     // Skip validation - allow any topic!
     if (cappedTopic.trim()) {
@@ -136,20 +135,12 @@ function App() {
     setStep('topic');
     setTopic('');
     setSubmittedTopic(null);
-    setValidation(null);
     setSelectedSide(null);
     setCurrentMessage('');
     setChatMessages([]);
     setRoundCount(1);
   };
 
-  const startNewDebate = () => {
-    setStep('side');
-    setSelectedSide(null);
-    setCurrentMessage('');
-    setChatMessages([]);
-    setRoundCount(1);
-  };
 
   const getWordCount = (text: string) => {
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
