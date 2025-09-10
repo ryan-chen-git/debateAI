@@ -5,6 +5,7 @@ import path from 'path';
 import { DebateManager } from './lib/debateManager';
 import { logger } from './lib/logger';
 import { GeminiService } from './lib/geminiService';
+import { DebateSession, DebateRound } from './lib/types';
 
 dotenv.config();
 
@@ -79,7 +80,11 @@ app.get('/api/info', (req, res) => {
             'GET /api/info - Server info',
             'GET /api/ping - Health check',
             'POST /api/validate-topic - Validate debate topic',
-            'POST /api/debate/submit - Submit debate arguments'
+            'POST /api/debate/create - Create new debate session',
+            'POST /api/debate/:sessionId/submit - Submit round response',
+            'GET /api/debate/:sessionId - Get session details',
+            'POST /api/debate/submit - Submit debate arguments (legacy)',
+            'GET /api/debate/state - Get debate state (legacy)'
         ],
         status: 'running',
         features: ['Gemini AI Counter-Arguments', 'Advanced Logging', 'React Frontend', 'Unrestricted Debate Topics']
@@ -112,7 +117,247 @@ app.post('/api/validate-topic', async (req, res) => {
 
 // No topic validation needed - debate anything! 🔥
 
-// Debate submission endpoint with AI counter-argument
+// Create new debate session
+app.post('/api/debate/create', async (req, res) => {
+    try {
+        const { topic, refinedTopic, userSide } = req.body;
+        
+        if (!topic || !refinedTopic || !userSide) {
+            return res.status(400).json({
+                success: false,
+                message: 'Topic, refinedTopic, and userSide are required'
+            });
+        }
+
+        if (!['pro', 'con'].includes(userSide)) {
+            return res.status(400).json({
+                success: false,
+                message: 'userSide must be either "pro" or "con"'
+            });
+        }
+
+        const session = debateManager.createSession(topic, refinedTopic, userSide);
+        
+        logger.log('INFO', 'backend', 'New debate session created', {
+            sessionId: session.id,
+            topic: topic.substring(0, 50) + '...',
+            userSide
+        });
+
+        res.json({
+            success: true,
+            session: session,
+            message: 'Debate session created successfully'
+        });
+        
+    } catch (error) {
+        logger.logError('backend', error as Error, { context: 'create-debate-session' });
+        res.status(500).json({
+            success: false,
+            message: 'Server error creating debate session'
+        });
+    }
+});
+
+// Submit user response for current round
+app.post('/api/debate/:sessionId/submit', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const { response } = req.body;
+        
+        if (!response || typeof response !== 'string') {
+            return res.status(400).json({
+                success: false,
+                message: 'Response is required and must be a string'
+            });
+        }
+
+        const session = debateManager.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({
+                success: false,
+                message: 'Debate session not found'
+            });
+        }
+
+        if (session.isComplete) {
+            return res.status(400).json({
+                success: false,
+                message: 'Debate session is already complete'
+            });
+        }
+
+        const currentRoundType = debateManager.getCurrentRoundType(session.currentRound);
+        
+        // Submit user response
+        const userResult = debateManager.submitUserResponse(sessionId, response, currentRoundType);
+        if (!userResult.success) {
+            return res.status(400).json(userResult);
+        }
+
+        logger.log('INFO', 'backend', 'User response submitted', {
+            sessionId,
+            roundType: currentRoundType,
+            roundNumber: session.currentRound
+        });
+
+        let aiResponse: string | null = null;
+
+        // Generate AI response (except for closing round)
+        if (currentRoundType !== 'closing') {
+            try {
+                let aiResult;
+                
+                if (currentRoundType === 'constructive') {
+                    // Round 1: AI gives its own constructive argument (independent of user's response)
+                    const aiSide = session.userSide === 'pro' ? 'con' : 'pro';
+                    aiResult = await geminiService.generateConstructiveArgument(
+                        session.refinedTopic,
+                        aiSide,
+                        180
+                    );
+                } else if (currentRoundType === 'cross-ex') {
+                    // Round 2: AI responds to cross-examination based on user's questions
+                    aiResult = await geminiService.generateCounterArgument(
+                        session.refinedTopic,
+                        session.userSide,
+                        response,
+                        180
+                    );
+                } else {
+                    // Round 3+: AI gives rebuttals/responses
+                    aiResult = await geminiService.generateCounterArgument(
+                        session.refinedTopic,
+                        session.userSide,
+                        response,
+                        180
+                    );
+                }
+
+                if (aiResult.success && aiResult.argument && userResult.round) {
+                    const aiAddResult = debateManager.addAIResponse(sessionId, userResult.round.id, aiResult.argument);
+                    if (aiAddResult.success) {
+                        aiResponse = aiResult.argument;
+                        logger.log('INFO', 'backend', 'AI response generated and added', {
+                            sessionId,
+                            roundType: currentRoundType
+                        });
+                    }
+                }
+            } catch (error) {
+                logger.logError('backend', error as Error, { 
+                    context: 'ai-response-generation',
+                    sessionId,
+                    roundType: currentRoundType
+                });
+            }
+        }
+
+        // Advance to next round or complete debate
+        const advanceResult = debateManager.advanceRound(sessionId);
+        const updatedSession = debateManager.getSession(sessionId);
+
+        // If debate is complete, generate final grading for all rounds
+        let finalGrading: any = null;
+        if (updatedSession?.isComplete) {
+            try {
+                logger.log('INFO', 'backend', 'Debate complete, generating final grading', {
+                    sessionId
+                });
+
+                // Grade all rounds at once
+                for (const round of updatedSession.rounds) {
+                    if (round.userResponse) {
+                        const roundGrading = await geminiService.gradeResponse(
+                            round.type,
+                            updatedSession.refinedTopic,
+                            updatedSession.userSide,
+                            round.userResponse,
+                            round.aiResponse || undefined
+                        );
+
+                        if (roundGrading.success && roundGrading.grading) {
+                            debateManager.addGrading(sessionId, round.id, roundGrading.grading);
+                        }
+                    }
+                }
+
+                // Get updated session with all grading
+                const finalSession = debateManager.getSession(sessionId);
+                finalGrading = finalSession?.finalGrading || null;
+
+                logger.log('INFO', 'backend', 'Final grading completed', {
+                    sessionId,
+                    finalScore: finalGrading?.finalScore || 0
+                });
+            } catch (error) {
+                logger.logError('backend', error as Error, { 
+                    context: 'final-grading-generation',
+                    sessionId
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'Response submitted successfully',
+            round: {
+                type: currentRoundType,
+                userResponse: response,
+                aiResponse,
+                grading: null // No individual round grading
+            },
+            session: updatedSession,
+            nextRound: advanceResult.newRound,
+            isComplete: updatedSession?.isComplete || false,
+            finalGrading: finalGrading
+        });
+
+    } catch (error) {
+        logger.logError('backend', error as Error, { 
+            context: 'submit-debate-response',
+            sessionId: req.params.sessionId 
+        });
+        
+        res.status(500).json({
+            success: false,
+            message: 'Server error processing response'
+        });
+    }
+});
+
+// Get debate session details
+app.get('/api/debate/:sessionId', (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const session = debateManager.getSession(sessionId);
+        
+        if (!session) {
+            return res.status(404).json({
+                success: false,
+                message: 'Debate session not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            session
+        });
+        
+    } catch (error) {
+        logger.logError('backend', error as Error, { 
+            context: 'get-debate-session',
+            sessionId: req.params.sessionId 
+        });
+        
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving session'
+        });
+    }
+});
+
+// Legacy debate submission endpoint with AI counter-argument
 app.post('/api/debate/submit', async (req, res) => {
     const { argument, side, topic } = req.body;
     
@@ -214,6 +459,184 @@ app.get('/api/debate/state', (req, res) => {
         arguments: debateArguments,
         totalArguments: debateArguments.sideA.length + debateArguments.sideB.length
     });
+});
+
+// Frontend-compatible endpoints
+// Start debate endpoint (frontend expects this)
+app.post('/api/start-debate', async (req, res) => {
+    try {
+        const { topic, position, startingPlayer } = req.body;
+        
+        if (!topic) {
+            return res.status(400).json({
+                success: false,
+                message: 'Topic is required'
+            });
+        }
+
+        // Convert position to userSide
+        const userSide = position === 'for' ? 'pro' : 'con';
+        
+        // Create session with refined topic (use original topic for now)
+        const session = debateManager.createSession(topic, topic, userSide);
+        
+        logger.log('INFO', 'backend', 'New debate session created via start-debate endpoint', {
+            sessionId: session.id,
+            topic: topic.substring(0, 50) + '...',
+            userSide,
+            startingPlayer
+        });
+
+        res.json({
+            success: true,
+            session
+        });
+
+    } catch (error) {
+        logger.logError('backend', error as Error, { 
+            context: 'start-debate-endpoint' 
+        });
+        
+        res.status(500).json({
+            success: false,
+            message: 'Server error creating debate session'
+        });
+    }
+});
+
+// Submit argument endpoint (frontend expects this)
+app.post('/api/submit-argument', async (req, res) => {
+    try {
+        const { sessionId, argument } = req.body;
+        
+        if (!sessionId || !argument) {
+            return res.status(400).json({
+                success: false,
+                message: 'Session ID and argument are required'
+            });
+        }
+
+        const session = debateManager.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({
+                success: false,
+                message: 'Session not found'
+            });
+        }
+
+        // Determine round type
+        const roundTypes = ['constructive', 'cross-ex', 'rebuttal', 'closing'] as const;
+        const currentRoundType = roundTypes[session.currentRound - 1];
+
+        logger.log('INFO', 'backend', 'Submitting user response via submit-argument endpoint', {
+            sessionId,
+            currentRound: session.currentRound,
+            roundType: currentRoundType
+        });
+
+        // Add user response to current round
+        const userResult = debateManager.submitUserResponse(sessionId, argument, currentRoundType);
+        
+        if (!userResult.success) {
+            return res.status(400).json(userResult);
+        }
+
+        let aiResponse: string | null = null;
+
+        // Generate AI response (except for closing round)
+        if (currentRoundType !== 'closing') {
+            try {
+                let aiResult;
+                
+                if (currentRoundType === 'constructive') {
+                    // Round 1: AI gives its own constructive argument
+                    const aiSide = session.userSide === 'pro' ? 'con' : 'pro';
+                    aiResult = await geminiService.generateConstructiveArgument(
+                        session.refinedTopic,
+                        aiSide,
+                        180
+                    );
+                } else {
+                    // Round 2+: AI gives responses/rebuttals
+                    aiResult = await geminiService.generateCounterArgument(
+                        session.refinedTopic,
+                        session.userSide,
+                        argument,
+                        180
+                    );
+                }
+
+                if (aiResult.success && aiResult.argument && userResult.round) {
+                    const aiAddResult = debateManager.addAIResponse(sessionId, userResult.round.id, aiResult.argument);
+                    if (aiAddResult.success) {
+                        aiResponse = aiResult.argument;
+                    }
+                }
+            } catch (error) {
+                logger.logError('backend', error as Error, { 
+                    context: 'ai-response-generation-submit-argument',
+                    sessionId
+                });
+            }
+        }
+
+        // Advance to next round or complete debate
+        debateManager.advanceRound(sessionId);
+        const updatedSession = debateManager.getSession(sessionId);
+
+        res.json({
+            success: true,
+            session: updatedSession
+        });
+
+    } catch (error) {
+        logger.logError('backend', error as Error, { 
+            context: 'submit-argument-endpoint' 
+        });
+        
+        res.status(500).json({
+            success: false,
+            message: 'Server error submitting argument'
+        });
+    }
+});
+
+// AI response endpoint (frontend expects this)
+app.post('/api/ai-response', async (req, res) => {
+    try {
+        const { sessionId } = req.body;
+        
+        if (!sessionId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Session ID is required'
+            });
+        }
+
+        const session = debateManager.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({
+                success: false,
+                message: 'Session not found'
+            });
+        }
+
+        // Return the current session (AI response should already be generated)
+        res.json({
+            success: true,
+            session
+        });
+
+    } catch (error) {
+        logger.logError('backend', error as Error, { 
+            context: 'ai-response-endpoint' 
+        });
+        
+        res.status(500).json({
+            success: false,
+            message: 'Server error getting AI response'
+        });
+    }
 });
 
 // Catch all handler: send back React's index.html file for client-side routing

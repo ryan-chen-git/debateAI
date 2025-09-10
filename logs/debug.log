@@ -1,15 +1,34 @@
-[2025-09-09T09:02:52.711Z] [INFO] [backend] Log file cleared
+[2025-09-10T05:55:31.008Z] [INFO] [backend] Log file cleared
 --------------------------------------------------------------------------------
-[2025-09-09T09:02:52.711Z] [DEBUG] [backend] Gemini constructor called
+[2025-09-10T05:55:31.010Z] [DEBUG] [backend] Gemini constructor called
 Data: {
   "hasApiKey": true,
   "apiKeyPrefix": "AIzaSyB7iChcRlM..."
 }
 --------------------------------------------------------------------------------
-[2025-09-09T09:02:52.712Z] [INFO] [backend] Gemini AI initialized successfully
+[2025-09-10T05:55:31.010Z] [INFO] [backend] Gemini AI initialized successfully
 Data: {
   "modelName": "gemini-1.5-flash"
 }
 --------------------------------------------------------------------------------
-[2025-09-09T09:02:52.715Z] [INFO] [backend] Unified server running on http://localhost:3000
+[2025-09-10T05:55:31.014Z] [INFO] [backend] Unified server running on http://localhost:3000
+--------------------------------------------------------------------------------
+[2025-09-10T05:55:33.827Z] [INFO] [backend] Incoming POST request to /api/start-debate
+--------------------------------------------------------------------------------
+[2025-09-10T05:55:33.829Z] [INFO] [backend] New debate session created via start-debate endpoint
+Data: {
+  "sessionId": "f5177955-c3b3-4d2e-9adf-b7bd1ef7537a",
+  "topic": "dsfdas...",
+  "userSide": "pro",
+  "startingPlayer": "human"
+}
+--------------------------------------------------------------------------------
+[2025-09-10T05:55:33.829Z] [INFO] [backend] POST /api/start-debate
+Data: {
+  "method": "POST",
+  "url": "/api/start-debate",
+  "data": "{\"success\":true,\"session\":{\"id\":\"f5177955-c3b3-4d2e-9adf-b7bd1ef7537a\",\"topic\":\"dsfdas\",\"refinedTopic\":\"dsfdas\",\"userSide\":\"pro\",\"currentRound\":1,\"rounds\":[],\"isComplete\":false,\"createdAt\":\"2025-09-10T05:55:33.829Z\",\"updatedAt\":\"2025-09-10T05:55:33.829Z\"}}",
+  "duration": "2ms",
+  "timestamp": "2025-09-10T05:55:33.829Z"
+}
 --------------------------------------------------------------------------------
