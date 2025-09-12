@@ -91,6 +91,42 @@ app.get('/api/info', (req, res) => {
     });
 });
 
+// Prepare validator endpoint - pre-loads AI with validator instructions
+app.post('/api/prepare-validator', async (req, res) => {
+    try {
+        logger.log('INFO', 'backend', '🚀 PREPARE-VALIDATOR: Starting AI preparation for topic validation...');
+        
+        // Actually prepare the AI with the validation prompt
+        const prepared = await geminiService.prepareTopicValidator();
+        
+        if (prepared.success) {
+            logger.log('INFO', 'backend', '✅ PREPARE-VALIDATOR: AI successfully prepared and ready for fast validation!', {
+                preparationTime: prepared.preparationTime,
+                conversationId: prepared.conversationId
+            });
+        } else {
+            logger.log('WARN', 'backend', '⚠️ PREPARE-VALIDATOR: AI preparation failed, will use fallback', {
+                error: prepared.error
+            });
+        }
+        
+        res.json({
+            success: true,
+            prepared: prepared.success,
+            message: prepared.success ? 'AI validator prepared and ready!' : 'Using fallback validation'
+        });
+    } catch (error) {
+        logger.logError('backend', error as Error, { context: 'validator-preparation' });
+        logger.log('ERROR', 'backend', '❌ PREPARE-VALIDATOR: Failed to prepare AI validator', {
+            errorMessage: (error as Error).message
+        });
+        res.status(500).json({
+            success: false,
+            message: 'Server error during validator preparation'
+        });
+    }
+});
+
 // Topic validation endpoint
 app.post('/api/validate-topic', async (req, res) => {
     try {
@@ -203,54 +239,55 @@ app.post('/api/debate/:sessionId/submit', async (req, res) => {
 
         let aiResponse: string | null = null;
 
-        // Generate AI response (except for closing round)
-        if (currentRoundType !== 'closing') {
-            try {
-                let aiResult;
+        // Generate AI response for all rounds
+        try {
+            let aiResult;
+            
+            if (currentRoundType === 'constructive') {
+                // Round 1: AI gives its own constructive argument (independent of user's response)
+                const aiSide = session.userSide === 'pro' ? 'con' : 'pro';
+                aiResult = await geminiService.generateConstructiveArgument(
+                    session.refinedTopic,
+                    aiSide,
+                    180
+                );
+            } else if (currentRoundType === 'cross-ex') {
+                // Round 2: AI responds to cross-examination based on user's constructive argument (round 1), not cross-ex questions
+                const constructiveRound = session.rounds.find(r => r.type === 'constructive');
+                const userConstructiveArgument = constructiveRound?.userResponse || '';
                 
-                if (currentRoundType === 'constructive') {
-                    // Round 1: AI gives its own constructive argument (independent of user's response)
-                    const aiSide = session.userSide === 'pro' ? 'con' : 'pro';
-                    aiResult = await geminiService.generateConstructiveArgument(
-                        session.refinedTopic,
-                        aiSide,
-                        180
-                    );
-                } else if (currentRoundType === 'cross-ex') {
-                    // Round 2: AI responds to cross-examination based on user's questions
-                    aiResult = await geminiService.generateCounterArgument(
-                        session.refinedTopic,
-                        session.userSide,
-                        response,
-                        180
-                    );
-                } else {
-                    // Round 3+: AI gives rebuttals/responses
-                    aiResult = await geminiService.generateCounterArgument(
-                        session.refinedTopic,
-                        session.userSide,
-                        response,
-                        180
-                    );
-                }
-
-                if (aiResult.success && aiResult.argument && userResult.round) {
-                    const aiAddResult = debateManager.addAIResponse(sessionId, userResult.round.id, aiResult.argument);
-                    if (aiAddResult.success) {
-                        aiResponse = aiResult.argument;
-                        logger.log('INFO', 'backend', 'AI response generated and added', {
-                            sessionId,
-                            roundType: currentRoundType
-                        });
-                    }
-                }
-            } catch (error) {
-                logger.logError('backend', error as Error, { 
-                    context: 'ai-response-generation',
-                    sessionId,
-                    roundType: currentRoundType
-                });
+                aiResult = await geminiService.generateCounterArgument(
+                    session.refinedTopic,
+                    session.userSide,
+                    userConstructiveArgument, // Use constructive argument, not current cross-ex input
+                    180
+                );
+            } else {
+                // Round 3+ (rebuttal & closing): AI gives responses based on current user input
+                aiResult = await geminiService.generateCounterArgument(
+                    session.refinedTopic,
+                    session.userSide,
+                    response,
+                    180
+                );
             }
+
+            if (aiResult.success && aiResult.argument && userResult.round) {
+                const aiAddResult = debateManager.addAIResponse(sessionId, userResult.round.id, aiResult.argument);
+                if (aiAddResult.success) {
+                    aiResponse = aiResult.argument;
+                    logger.log('INFO', 'backend', 'AI response generated and added', {
+                        sessionId,
+                        roundType: currentRoundType
+                    });
+                }
+            }
+        } catch (error) {
+            logger.logError('backend', error as Error, { 
+                context: 'ai-response-generation',
+                sessionId,
+                roundType: currentRoundType
+            });
         }
 
         // Advance to next round or complete debate
@@ -543,41 +580,62 @@ app.post('/api/submit-argument', async (req, res) => {
 
         let aiResponse: string | null = null;
 
-        // Generate AI response (except for closing round)
-        if (currentRoundType !== 'closing') {
-            try {
-                let aiResult;
+        // Generate AI response for all rounds
+        try {
+            let aiResult;
+            
+            if (currentRoundType === 'constructive') {
+                // Round 1: AI gives its own constructive argument
+                const aiSide = session.userSide === 'pro' ? 'con' : 'pro';
                 
-                if (currentRoundType === 'constructive') {
-                    // Round 1: AI gives its own constructive argument
-                    const aiSide = session.userSide === 'pro' ? 'con' : 'pro';
+                // If user went first, analyze their tone and match it
+                if (session.rounds.length > 0 && session.rounds[0].userResponse) {
+                    aiResult = await geminiService.generateConstructiveArgumentWithToneMatching(
+                        session.refinedTopic,
+                        aiSide,
+                        session.rounds[0].userResponse, // User's constructive argument for tone analysis
+                        180
+                    );
+                } else {
+                    // AI goes first, use default casual tone
                     aiResult = await geminiService.generateConstructiveArgument(
                         session.refinedTopic,
                         aiSide,
                         180
                     );
-                } else {
-                    // Round 2+: AI gives responses/rebuttals
-                    aiResult = await geminiService.generateCounterArgument(
-                        session.refinedTopic,
-                        session.userSide,
-                        argument,
-                        180
-                    );
                 }
-
-                if (aiResult.success && aiResult.argument && userResult.round) {
-                    const aiAddResult = debateManager.addAIResponse(sessionId, userResult.round.id, aiResult.argument);
-                    if (aiAddResult.success) {
-                        aiResponse = aiResult.argument;
-                    }
-                }
-            } catch (error) {
-                logger.logError('backend', error as Error, { 
-                    context: 'ai-response-generation-submit-argument',
-                    sessionId
-                });
+            } else if (currentRoundType === 'cross-ex') {
+                // Round 2: AI responds based on constructive argument, not cross-ex questions
+                const constructiveRound = session.rounds.find(r => r.type === 'constructive');
+                const userConstructiveArgument = constructiveRound?.userResponse || '';
+                
+                aiResult = await geminiService.generateCounterArgument(
+                    session.refinedTopic,
+                    session.userSide,
+                    userConstructiveArgument,
+                    180
+                );
+            } else {
+                // Round 3+ (rebuttal & closing): AI gives responses/rebuttals
+                aiResult = await geminiService.generateCounterArgument(
+                    session.refinedTopic,
+                    session.userSide,
+                    argument,
+                    180
+                );
             }
+
+            if (aiResult.success && aiResult.argument && userResult.round) {
+                const aiAddResult = debateManager.addAIResponse(sessionId, userResult.round.id, aiResult.argument);
+                if (aiAddResult.success) {
+                    aiResponse = aiResult.argument;
+                }
+            }
+        } catch (error) {
+            logger.logError('backend', error as Error, { 
+                context: 'ai-response-generation-submit-argument',
+                sessionId
+            });
         }
 
         // Advance to next round or complete debate

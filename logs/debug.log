@@ -1,34 +1,355 @@
-[2025-09-10T05:55:31.008Z] [INFO] [backend] Log file cleared
+[2025-09-12T10:04:49.988Z] [INFO] [backend] Log file cleared
 --------------------------------------------------------------------------------
-[2025-09-10T05:55:31.010Z] [DEBUG] [backend] Gemini constructor called
+[2025-09-12T10:04:49.989Z] [DEBUG] [backend] Gemini constructor called
 Data: {
   "hasApiKey": true,
   "apiKeyPrefix": "AIzaSyB7iChcRlM..."
 }
 --------------------------------------------------------------------------------
-[2025-09-10T05:55:31.010Z] [INFO] [backend] Gemini AI initialized successfully
+[2025-09-12T10:04:49.990Z] [INFO] [backend] Gemini AI initialized successfully
 Data: {
   "modelName": "gemini-1.5-flash"
 }
 --------------------------------------------------------------------------------
-[2025-09-10T05:55:31.014Z] [INFO] [backend] Unified server running on http://localhost:3000
+[2025-09-12T10:04:49.993Z] [INFO] [backend] Unified server running on http://localhost:3000
 --------------------------------------------------------------------------------
-[2025-09-10T05:55:33.827Z] [INFO] [backend] Incoming POST request to /api/start-debate
+[2025-09-12T10:04:53.882Z] [INFO] [backend] Incoming POST request to /api/prepare-validator
 --------------------------------------------------------------------------------
-[2025-09-10T05:55:33.829Z] [INFO] [backend] New debate session created via start-debate endpoint
+[2025-09-12T10:04:53.883Z] [INFO] [backend] 🚀 PREPARE-VALIDATOR: Starting AI preparation for topic validation...
+--------------------------------------------------------------------------------
+[2025-09-12T10:04:53.883Z] [INFO] [backend] 🔄 Preparing Gemini AI for topic validation...
+--------------------------------------------------------------------------------
+[2025-09-12T10:04:54.319Z] [INFO] [backend] ✅ Gemini AI validator prepared successfully!
 Data: {
-  "sessionId": "f5177955-c3b3-4d2e-9adf-b7bd1ef7537a",
-  "topic": "dsfdas...",
+  "conversationId": "validator_1757671494319",
+  "preparationTime": "436ms",
+  "aiResponse": "ready\n..."
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:04:54.320Z] [INFO] [backend] ✅ PREPARE-VALIDATOR: AI successfully prepared and ready for fast validation!
+Data: {
+  "preparationTime": 436,
+  "conversationId": "validator_1757671494319"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:04:54.320Z] [INFO] [backend] POST /api/prepare-validator
+Data: {
+  "method": "POST",
+  "url": "/api/prepare-validator",
+  "data": "{\"success\":true,\"prepared\":true,\"message\":\"AI validator prepared and ready!\"}",
+  "duration": "438ms",
+  "timestamp": "2025-09-12T10:04:54.320Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:05.316Z] [INFO] [backend] Incoming POST request to /api/validate-topic
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:05.317Z] [INFO] [backend] 🔍 Starting topic validation
+Data: {
+  "topic": "humans should not eat...",
+  "hasPreparedChat": true,
+  "chatId": "validator_1757671494319"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:05.317Z] [INFO] [backend] ⚡ Using prepared chat for FAST validation...
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:06.211Z] [INFO] [backend] ✅ FAST validation completed!
+Data: {
+  "validationTime": "894ms",
+  "responseLength": 395,
+  "chatId": "validator_1757671494319"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:06.212Z] [INFO] [backend] POST /api/validate-topic
+Data: {
+  "method": "POST",
+  "url": "/api/validate-topic",
+  "data": "{\"valid\":true,\"reason\":\"While seemingly extreme, this statement can be debated. Arguments could be made for and against the necessity of eating for human survival and well-being, exploring philosophical, ethical, and practical considerations.\",\"refinedTopic\":\"Should humans abstain from eating?\",\"suggestedRewrite\":\"This house believes that humans should not eat.\"}",
+  "duration": "896ms",
+  "timestamp": "2025-09-12T10:05:06.212Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:06.219Z] [INFO] [backend] Incoming POST request to /api/start-debate
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:06.221Z] [INFO] [backend] New debate session created via start-debate endpoint
+Data: {
+  "sessionId": "6d5d245e-d5e4-4520-9beb-cc4331a0355a",
+  "topic": "humans should not eat...",
   "userSide": "pro",
   "startingPlayer": "human"
 }
 --------------------------------------------------------------------------------
-[2025-09-10T05:55:33.829Z] [INFO] [backend] POST /api/start-debate
+[2025-09-12T10:05:06.221Z] [INFO] [backend] POST /api/start-debate
 Data: {
   "method": "POST",
   "url": "/api/start-debate",
-  "data": "{\"success\":true,\"session\":{\"id\":\"f5177955-c3b3-4d2e-9adf-b7bd1ef7537a\",\"topic\":\"dsfdas\",\"refinedTopic\":\"dsfdas\",\"userSide\":\"pro\",\"currentRound\":1,\"rounds\":[],\"isComplete\":false,\"createdAt\":\"2025-09-10T05:55:33.829Z\",\"updatedAt\":\"2025-09-10T05:55:33.829Z\"}}",
+  "data": "{\"success\":true,\"session\":{\"id\":\"6d5d245e-d5e4-4520-9beb-cc4331a0355a\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":1,\"rounds\":[],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:06.221Z\",\"updatedAt\":\"2025-09-12T10:05:06.221Z\"}}",
   "duration": "2ms",
-  "timestamp": "2025-09-10T05:55:33.829Z"
+  "timestamp": "2025-09-12T10:05:06.221Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:20.336Z] [INFO] [backend] Incoming POST request to /api/validate-topic
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:20.337Z] [INFO] [backend] 🔍 Starting topic validation
+Data: {
+  "topic": "dsfa...",
+  "hasPreparedChat": true,
+  "chatId": "validator_1757671494319"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:20.337Z] [INFO] [backend] ⚡ Using prepared chat for FAST validation...
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:20.976Z] [INFO] [backend] ✅ FAST validation completed!
+Data: {
+  "validationTime": "640ms",
+  "responseLength": 180,
+  "chatId": "validator_1757671494319"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:20.977Z] [INFO] [backend] POST /api/validate-topic
+Data: {
+  "method": "POST",
+  "url": "/api/validate-topic",
+  "data": "{\"valid\":false,\"reason\":\"The input string 'dsfa' is gibberish and does not constitute a debatable topic.\",\"refinedTopic\":null,\"suggestedRewrite\":null}",
+  "duration": "641ms",
+  "timestamp": "2025-09-12T10:05:20.977Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:26.616Z] [INFO] [backend] Incoming POST request to /api/validate-topic
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:26.616Z] [INFO] [backend] 🔍 Starting topic validation
+Data: {
+  "topic": "humans should not eat...",
+  "hasPreparedChat": true,
+  "chatId": "validator_1757671494319"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:26.617Z] [INFO] [backend] ⚡ Using prepared chat for FAST validation...
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:27.653Z] [INFO] [backend] ✅ FAST validation completed!
+Data: {
+  "validationTime": "1037ms",
+  "responseLength": 539,
+  "chatId": "validator_1757671494319"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:27.654Z] [INFO] [backend] POST /api/validate-topic
+Data: {
+  "method": "POST",
+  "url": "/api/validate-topic",
+  "data": "{\"valid\":true,\"reason\":\"While seemingly extreme, this statement can be debated. Arguments could be made for and against the necessity of eating for human survival and well-being, exploring philosophical, ethical, and practical considerations.  The debate could focus on alternative sustenance methods, the ethics of animal agriculture, or the potential for future technologies.\",\"refinedTopic\":\"Should humans abstain from eating?\",\"suggestedRewrite\":\"This house believes that humans should not consume food.\"}",
+  "duration": "1038ms",
+  "timestamp": "2025-09-12T10:05:27.654Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:27.659Z] [INFO] [backend] Incoming POST request to /api/start-debate
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:27.660Z] [INFO] [backend] New debate session created via start-debate endpoint
+Data: {
+  "sessionId": "407e93ef-f4b2-4415-8cd1-a1429551b569",
+  "topic": "humans should not eat...",
+  "userSide": "pro",
+  "startingPlayer": "human"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:27.661Z] [INFO] [backend] POST /api/start-debate
+Data: {
+  "method": "POST",
+  "url": "/api/start-debate",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":1,\"rounds\":[],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:05:27.660Z\"}}",
+  "duration": "2ms",
+  "timestamp": "2025-09-12T10:05:27.661Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:32.319Z] [INFO] [backend] Incoming POST request to /api/submit-argument
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:32.320Z] [INFO] [backend] Submitting user response via submit-argument endpoint
+Data: {
+  "sessionId": "407e93ef-f4b2-4415-8cd1-a1429551b569",
+  "currentRound": 1,
+  "roundType": "constructive"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:32.321Z] [INFO] [backend] Generating AI constructive argument with tone matching
+Data: {
+  "topic": "humans should not eat",
+  "aiSide": "con (always opposing)",
+  "aiPosition": "opposing",
+  "userToneReferenceLength": 6
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:32.322Z] [DEBUG] [backend] Calling Gemini for tone-matched constructive argument generation
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:32.957Z] [DEBUG] [backend] Gemini tone-matched constructive argument raw response
+Data: {
+  "responseLength": 187,
+  "responsePreview": "Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's aw..."
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:32.958Z] [INFO] [backend] Tone-matched constructive argument generated successfully
+Data: {
+  "wordCount": 30,
+  "wordLimit": 180
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:32.958Z] [INFO] [backend] POST /api/submit-argument
+Data: {
+  "method": "POST",
+  "url": "/api/submit-argument",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":2,\"rounds\":[{\"id\":\"2ea89c4e-c4e9-4395-82c0-7e5afe8540b4\",\"type\":\"constructive\",\"userResponse\":\"dsafsd\",\"timestamp\":\"2025-09-12T10:05:32.321Z\",\"aiResponse\":\"Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's awesome, and social events revolve around it.  And all those yummy nutrients?  Essential.\"}],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:05:32.958Z\"}}",
+  "duration": "639ms",
+  "timestamp": "2025-09-12T10:05:32.958Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:35.264Z] [INFO] [backend] Incoming POST request to /api/ai-response
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:35.265Z] [INFO] [backend] POST /api/ai-response
+Data: {
+  "method": "POST",
+  "url": "/api/ai-response",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":2,\"rounds\":[{\"id\":\"2ea89c4e-c4e9-4395-82c0-7e5afe8540b4\",\"type\":\"constructive\",\"userResponse\":\"dsafsd\",\"timestamp\":\"2025-09-12T10:05:32.321Z\",\"aiResponse\":\"Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's awesome, and social events revolve around it.  And all those yummy nutrients?  Essential.\"}],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:05:32.958Z\"}}",
+  "duration": "1ms",
+  "timestamp": "2025-09-12T10:05:35.265Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:59.094Z] [INFO] [backend] Incoming POST request to /api/submit-argument
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:59.095Z] [INFO] [backend] Submitting user response via submit-argument endpoint
+Data: {
+  "sessionId": "407e93ef-f4b2-4415-8cd1-a1429551b569",
+  "currentRound": 2,
+  "roundType": "cross-ex"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:59.096Z] [INFO] [backend] Generating counter-argument
+Data: {
+  "topic": "humans should not eat",
+  "aiSide": "con (always opposing)",
+  "userSide": "pro (always supporting)",
+  "userArgumentLength": 6
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:59.096Z] [DEBUG] [backend] Calling Gemini for counter-argument generation
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:59.582Z] [DEBUG] [backend] Gemini counter-argument raw response
+Data: {
+  "responseLength": 77,
+  "responsePreview": "Uh... that makes no sense at all.  We *need* to eat to live!  Survival, dude...."
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:59.583Z] [INFO] [backend] Counter-argument generated successfully
+Data: {
+  "wordCount": 15,
+  "wordLimit": 180
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:05:59.584Z] [INFO] [backend] POST /api/submit-argument
+Data: {
+  "method": "POST",
+  "url": "/api/submit-argument",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":3,\"rounds\":[{\"id\":\"2ea89c4e-c4e9-4395-82c0-7e5afe8540b4\",\"type\":\"constructive\",\"userResponse\":\"dsafsd\",\"timestamp\":\"2025-09-12T10:05:32.321Z\",\"aiResponse\":\"Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's awesome, and social events revolve around it.  And all those yummy nutrients?  Essential.\"},{\"id\":\"b567d4f3-4c14-4e53-8764-f964856c302c\",\"type\":\"cross-ex\",\"userResponse\":\"ur wrong\",\"timestamp\":\"2025-09-12T10:05:59.096Z\",\"aiResponse\":\"Uh... that makes no sense at all.  We *need* to eat to live!  Survival, dude.\"}],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:05:59.583Z\"}}",
+  "duration": "490ms",
+  "timestamp": "2025-09-12T10:05:59.584Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:01.591Z] [INFO] [backend] Incoming POST request to /api/ai-response
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:01.592Z] [INFO] [backend] POST /api/ai-response
+Data: {
+  "method": "POST",
+  "url": "/api/ai-response",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":3,\"rounds\":[{\"id\":\"2ea89c4e-c4e9-4395-82c0-7e5afe8540b4\",\"type\":\"constructive\",\"userResponse\":\"dsafsd\",\"timestamp\":\"2025-09-12T10:05:32.321Z\",\"aiResponse\":\"Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's awesome, and social events revolve around it.  And all those yummy nutrients?  Essential.\"},{\"id\":\"b567d4f3-4c14-4e53-8764-f964856c302c\",\"type\":\"cross-ex\",\"userResponse\":\"ur wrong\",\"timestamp\":\"2025-09-12T10:05:59.096Z\",\"aiResponse\":\"Uh... that makes no sense at all.  We *need* to eat to live!  Survival, dude.\"}],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:05:59.583Z\"}}",
+  "duration": "1ms",
+  "timestamp": "2025-09-12T10:06:01.592Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:09.619Z] [INFO] [backend] Incoming POST request to /api/submit-argument
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:09.620Z] [INFO] [backend] Submitting user response via submit-argument endpoint
+Data: {
+  "sessionId": "407e93ef-f4b2-4415-8cd1-a1429551b569",
+  "currentRound": 3,
+  "roundType": "rebuttal"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:09.621Z] [INFO] [backend] Generating counter-argument
+Data: {
+  "topic": "humans should not eat",
+  "aiSide": "con (always opposing)",
+  "userSide": "pro (always supporting)",
+  "userArgumentLength": 11
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:09.621Z] [DEBUG] [backend] Calling Gemini for counter-argument generation
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:10.112Z] [DEBUG] [backend] Gemini counter-argument raw response
+Data: {
+  "responseLength": 41,
+  "responsePreview": "No, *I'm* right.  We need to eat to live!..."
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:10.113Z] [INFO] [backend] Counter-argument generated successfully
+Data: {
+  "wordCount": 9,
+  "wordLimit": 180
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:10.114Z] [INFO] [backend] POST /api/submit-argument
+Data: {
+  "method": "POST",
+  "url": "/api/submit-argument",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":4,\"rounds\":[{\"id\":\"2ea89c4e-c4e9-4395-82c0-7e5afe8540b4\",\"type\":\"constructive\",\"userResponse\":\"dsafsd\",\"timestamp\":\"2025-09-12T10:05:32.321Z\",\"aiResponse\":\"Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's awesome, and social events revolve around it.  And all those yummy nutrients?  Essential.\"},{\"id\":\"b567d4f3-4c14-4e53-8764-f964856c302c\",\"type\":\"cross-ex\",\"userResponse\":\"ur wrong\",\"timestamp\":\"2025-09-12T10:05:59.096Z\",\"aiResponse\":\"Uh... that makes no sense at all.  We *need* to eat to live!  Survival, dude.\"},{\"id\":\"8bb02be9-b003-402e-a75b-dfb9ce1890fe\",\"type\":\"rebuttal\",\"userResponse\":\"no im right\",\"timestamp\":\"2025-09-12T10:06:09.621Z\",\"aiResponse\":\"No, *I'm* right.  We need to eat to live!\"}],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:06:10.114Z\"}}",
+  "duration": "495ms",
+  "timestamp": "2025-09-12T10:06:10.114Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:12.133Z] [INFO] [backend] Incoming POST request to /api/ai-response
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:12.134Z] [INFO] [backend] POST /api/ai-response
+Data: {
+  "method": "POST",
+  "url": "/api/ai-response",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":4,\"rounds\":[{\"id\":\"2ea89c4e-c4e9-4395-82c0-7e5afe8540b4\",\"type\":\"constructive\",\"userResponse\":\"dsafsd\",\"timestamp\":\"2025-09-12T10:05:32.321Z\",\"aiResponse\":\"Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's awesome, and social events revolve around it.  And all those yummy nutrients?  Essential.\"},{\"id\":\"b567d4f3-4c14-4e53-8764-f964856c302c\",\"type\":\"cross-ex\",\"userResponse\":\"ur wrong\",\"timestamp\":\"2025-09-12T10:05:59.096Z\",\"aiResponse\":\"Uh... that makes no sense at all.  We *need* to eat to live!  Survival, dude.\"},{\"id\":\"8bb02be9-b003-402e-a75b-dfb9ce1890fe\",\"type\":\"rebuttal\",\"userResponse\":\"no im right\",\"timestamp\":\"2025-09-12T10:06:09.621Z\",\"aiResponse\":\"No, *I'm* right.  We need to eat to live!\"}],\"isComplete\":false,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:06:10.114Z\"}}",
+  "duration": "1ms",
+  "timestamp": "2025-09-12T10:06:12.134Z"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:24.266Z] [INFO] [backend] Incoming POST request to /api/submit-argument
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:24.267Z] [INFO] [backend] Submitting user response via submit-argument endpoint
+Data: {
+  "sessionId": "407e93ef-f4b2-4415-8cd1-a1429551b569",
+  "currentRound": 4,
+  "roundType": "closing"
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:24.267Z] [INFO] [backend] Generating counter-argument
+Data: {
+  "topic": "humans should not eat",
+  "aiSide": "con (always opposing)",
+  "userSide": "pro (always supporting)",
+  "userArgumentLength": 8
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:24.267Z] [DEBUG] [backend] Calling Gemini for counter-argument generation
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:24.683Z] [DEBUG] [backend] Gemini counter-argument raw response
+Data: {
+  "responseLength": 54,
+  "responsePreview": "Ur wrong about *that*.  Humans need food to live, duh...."
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:24.684Z] [INFO] [backend] Counter-argument generated successfully
+Data: {
+  "wordCount": 10,
+  "wordLimit": 180
+}
+--------------------------------------------------------------------------------
+[2025-09-12T10:06:24.685Z] [INFO] [backend] POST /api/submit-argument
+Data: {
+  "method": "POST",
+  "url": "/api/submit-argument",
+  "data": "{\"success\":true,\"session\":{\"id\":\"407e93ef-f4b2-4415-8cd1-a1429551b569\",\"topic\":\"humans should not eat\",\"refinedTopic\":\"humans should not eat\",\"userSide\":\"pro\",\"currentRound\":4,\"rounds\":[{\"id\":\"2ea89c4e-c4e9-4395-82c0-7e5afe8540b4\",\"type\":\"constructive\",\"userResponse\":\"dsafsd\",\"timestamp\":\"2025-09-12T10:05:32.321Z\",\"aiResponse\":\"Dude, no way!  Humans *need* to eat.  Survival, duh.  We'd all die, think about it.  Plus, food's awesome, and social events revolve around it.  And all those yummy nutrients?  Essential.\"},{\"id\":\"b567d4f3-4c14-4e53-8764-f964856c302c\",\"type\":\"cross-ex\",\"userResponse\":\"ur wrong\",\"timestamp\":\"2025-09-12T10:05:59.096Z\",\"aiResponse\":\"Uh... that makes no sense at all.  We *need* to eat to live!  Survival, dude.\"},{\"id\":\"8bb02be9-b003-402e-a75b-dfb9ce1890fe\",\"type\":\"rebuttal\",\"userResponse\":\"no im right\",\"timestamp\":\"2025-09-12T10:06:09.621Z\",\"aiResponse\":\"No, *I'm* right.  We need to eat to live!\"},{\"id\":\"a32be6fb-81f0-43f4-a340-5d8cedc23359\",\"type\":\"closing\",\"userResponse\":\"ur wrong\",\"timestamp\":\"2025-09-12T10:06:24.267Z\",\"aiResponse\":\"Ur wrong about *that*.  Humans need food to live, duh.\"}],\"isComplete\":true,\"createdAt\":\"2025-09-12T10:05:27.660Z\",\"updatedAt\":\"2025-09-12T10:06:24.685Z\"}}",
+  "duration": "419ms",
+  "timestamp": "2025-09-12T10:06:24.685Z"
 }
 --------------------------------------------------------------------------------

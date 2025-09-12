@@ -7,9 +7,11 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentInput, setCurrentInput] = useState<string>('');
   const [topic, setTopic] = useState<string>('');
-  const [position, setPosition] = useState<'for' | 'against'>('for');
-  const [startingPlayer, setStartingPlayer] = useState<'human' | 'ai'>('human');
   const [isWaitingForAI, setIsWaitingForAI] = useState<boolean>(false);
+  const [isValidatingTopic, setIsValidatingTopic] = useState<boolean>(false);
+  const [topicValidation, setTopicValidation] = useState<{ valid: boolean; reason: string; refinedTopic?: string; suggestedRewrite?: string } | null>(null);
+  const [showRubric, setShowRubric] = useState<boolean>(false);
+  const [isValidatorReady, setIsValidatorReady] = useState<boolean>(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to latest round
@@ -19,9 +21,63 @@ const App: React.FC = () => {
     }
   }, [session]);
 
+  // Pre-load validator when user focuses on topic input
+  const prepareValidator = async () => {
+    if (isValidatorReady) return;
+    
+    try {
+      const response = await fetch('/api/prepare-validator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        setIsValidatorReady(true);
+      }
+    } catch (error) {
+      console.log('Failed to prepare validator, will work normally');
+    }
+  };
+
+  const validateTopic = async (topicToValidate: string) => {
+    setIsValidatingTopic(true);
+    setTopicValidation(null);
+    
+    try {
+      const response = await fetch('/api/validate-topic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topicToValidate })
+      });
+      
+      const result = await response.json();
+      setTopicValidation(result);
+      
+      if (result.valid && result.refinedTopic) {
+        setTopic(result.refinedTopic);
+      }
+      
+      return result.valid;
+    } catch (error) {
+      setTopicValidation({ 
+        valid: false, 
+        reason: 'Error validating topic. Please try again.' 
+      });
+      return false;
+    } finally {
+      setIsValidatingTopic(false);
+    }
+  };
+
   const startDebate = async () => {
     if (!topic.trim()) {
       setError('Please enter a debate topic');
+      return;
+    }
+
+    // Validate topic first
+    const isValid = await validateTopic(topic.trim());
+    if (!isValid) {
       return;
     }
 
@@ -32,7 +88,7 @@ const App: React.FC = () => {
       const response = await fetch('/api/start-debate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.trim(), position, startingPlayer })
+        body: JSON.stringify({ topic: topic.trim(), position: 'for', startingPlayer: 'human' })
       });
       
       if (!response.ok) {
@@ -42,29 +98,6 @@ const App: React.FC = () => {
       const data = await response.json();
       setSession(data.session);
       setCurrentInput('');
-      
-      // If AI starts first, get AI response
-      if (startingPlayer === 'ai') {
-        setIsWaitingForAI(true);
-        setTimeout(async () => {
-          try {
-            const aiResponse = await fetch('/api/ai-response', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sessionId: data.session.id })
-            });
-            
-            if (aiResponse.ok) {
-              const aiData = await aiResponse.json();
-              setSession(aiData.session);
-            }
-          } catch (aiError) {
-            console.error('AI response error:', aiError);
-          } finally {
-            setIsWaitingForAI(false);
-          }
-        }, 1500);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start debate');
     } finally {
@@ -75,6 +108,25 @@ const App: React.FC = () => {
   const submitArgument = async () => {
     if (!session || !currentInput.trim() || isWaitingForAI) return;
     
+    const userArgument = currentInput.trim();
+    
+    // Optimistic UI update - immediately add user response to avoid flickering
+    const optimisticSession = {
+      ...session,
+      rounds: session.rounds.map((round, idx) => {
+        if (idx === session.currentRound - 1) {
+          return {
+            ...round,
+            userResponse: userArgument
+          };
+        }
+        return round;
+      })
+    };
+    
+    // Update UI immediately
+    setSession(optimisticSession);
+    setCurrentInput('');
     setIsWaitingForAI(true);
     
     try {
@@ -83,17 +135,20 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
-          argument: currentInput.trim()
+          argument: userArgument
         })
       });
       
       if (!response.ok) {
+        // Revert optimistic update on error
+        setSession(session);
+        setCurrentInput(userArgument);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
+      // Update with server response (should be same as optimistic, but with AI response if available)
       setSession(data.session);
-      setCurrentInput('');
       
       // Get AI response if debate isn't complete
       if (!data.session.isComplete) {
@@ -130,6 +185,7 @@ const App: React.FC = () => {
     setCurrentInput('');
     setError('');
     setIsWaitingForAI(false);
+    setTopicValidation(null);
   };
 
   const getRoundTitle = (round: number): string => {
@@ -142,8 +198,8 @@ const App: React.FC = () => {
     }
   };
 
-  const getRubricForRound = (round: number) => {
-    const rubrics = {
+  const getAllRubrics = () => {
+    return {
       1: { // Constructive
         title: 'CONSTRUCTIVE',
         totalPoints: 30,
@@ -187,8 +243,87 @@ const App: React.FC = () => {
         ]
       }
     };
-    return rubrics[round as keyof typeof rubrics] || rubrics[1];
   };
+
+  const RubricComponent = () => (
+    <div style={{
+      position: 'fixed',
+      top: '20px',
+      right: '20px',
+      zIndex: 1000
+    }}>
+      <button
+        onClick={() => setShowRubric(!showRubric)}
+        style={{
+          padding: '12px 24px',
+          backgroundColor: '#1e3a8a',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontWeight: 600,
+          fontSize: '16px',
+          boxShadow: '0 4px 12px rgba(30,58,138,0.3)'
+        }}
+      >
+        {showRubric ? 'Hide Rubric' : 'Show Rubric'}
+      </button>
+      
+      {showRubric && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '0',
+          width: '400px',
+          maxHeight: '80vh',
+          backgroundColor: '#fff',
+          border: '2px solid #1e3a8a',
+          borderRadius: '12px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          overflow: 'auto',
+          padding: '20px'
+        }}>
+          <h3 style={{ 
+            color: '#1e3a8a', 
+            marginBottom: '20px', 
+            textAlign: 'center',
+            borderBottom: '2px solid #fbbf24',
+            paddingBottom: '10px'
+          }}>
+            DEBATE RUBRICS
+          </h3>
+          
+          {Object.entries(getAllRubrics()).map(([roundNum, rubric]) => (
+            <div key={roundNum} style={{ marginBottom: '25px' }}>
+              <h4 style={{ 
+                color: '#fbbf24', 
+                marginBottom: '10px',
+                fontSize: '16px',
+                fontWeight: 700
+              }}>
+                ROUND {roundNum}: {rubric.title} ({rubric.totalPoints} pts, {rubric.weight}% weight)
+              </h4>
+              
+              {rubric.criteria.map((criterion, idx) => (
+                <div key={idx} style={{ 
+                  marginBottom: '8px',
+                  paddingLeft: '15px',
+                  borderLeft: '3px solid #e2e8f0'
+                }}>
+                  <div style={{ fontWeight: 600, color: '#374151' }}>
+                    {criterion.name} ({criterion.points})
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                    {criterion.description}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   // Setup/Topic Selection Screen
   if (!session) {
@@ -199,8 +334,10 @@ const App: React.FC = () => {
         padding: 0,
         fontFamily: 'Segoe UI, Arial, sans-serif'
       }}>
+        <RubricComponent />
+        
         <div style={{
-          maxWidth: 800,
+          maxWidth: 1200,
           margin: '0 auto',
           padding: '40px 20px',
           background: '#fff',
@@ -230,7 +367,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+          <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}>
             <div style={{
               background: '#f8fafc',
               padding: '30px',
@@ -250,6 +387,7 @@ const App: React.FC = () => {
                   type="text"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
+                  onFocus={prepareValidator}
                   placeholder="Enter your debate topic..."
                   style={{
                     width: '100%',
@@ -261,121 +399,73 @@ const App: React.FC = () => {
                   }}
                   onKeyPress={(e) => e.key === 'Enter' && startDebate()}
                 />
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151' }}>
-                  Your Position:
-                </label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => setPosition('for')}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      border: '2px solid',
-                      borderColor: position === 'for' ? '#059669' : '#d1d5db',
-                      backgroundColor: position === 'for' ? '#d1fae5' : '#fff',
-                      color: position === 'for' ? '#059669' : '#374151',
-                      borderRadius: 6,
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    FOR (Supporting)
-                  </button>
-                  <button
-                    onClick={() => setPosition('against')}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      border: '2px solid',
-                      borderColor: position === 'against' ? '#dc2626' : '#d1d5db',
-                      backgroundColor: position === 'against' ? '#fee2e2' : '#fff',
-                      color: position === 'against' ? '#dc2626' : '#374151',
-                      borderRadius: 6,
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    AGAINST (Opposing)
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '30px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151' }}>
-                  Who Goes First:
-                </label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => setStartingPlayer('human')}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      border: '2px solid',
-                      borderColor: startingPlayer === 'human' ? '#2563eb' : '#d1d5db',
-                      backgroundColor: startingPlayer === 'human' ? '#dbeafe' : '#fff',
-                      color: startingPlayer === 'human' ? '#2563eb' : '#374151',
-                      borderRadius: 6,
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    You Start
-                  </button>
-                  <button
-                    onClick={() => setStartingPlayer('ai')}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      border: '2px solid',
-                      borderColor: startingPlayer === 'ai' ? '#7c3aed' : '#d1d5db',
-                      backgroundColor: startingPlayer === 'ai' ? '#ede9fe' : '#fff',
-                      color: startingPlayer === 'ai' ? '#7c3aed' : '#374151',
-                      borderRadius: 6,
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    AI Starts
-                  </button>
-                </div>
+                
+                {/* Topic validation feedback */}
+                {topicValidation && !topicValidation.valid && (
+                  <div style={{
+                    marginTop: '10px',
+                    padding: '10px',
+                    backgroundColor: '#fee2e2',
+                    border: '1px solid #fca5a5',
+                    borderRadius: '6px',
+                    color: '#dc2626'
+                  }}>
+                    {topicValidation.reason}
+                    {topicValidation.suggestedRewrite && (
+                      <div style={{ marginTop: '8px', fontStyle: 'italic' }}>
+                        Try: "{topicValidation.suggestedRewrite}"
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {topicValidation && topicValidation.valid && (
+                  <div style={{
+                    marginTop: '10px',
+                    padding: '10px',
+                    backgroundColor: '#d1fae5',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: '6px',
+                    color: '#059669'
+                  }}>
+                    ✓ Topic validated successfully!
+                  </div>
+                )}
               </div>
 
               <button
                 onClick={startDebate}
-                disabled={isLoading || !topic.trim()}
+                disabled={isLoading || isValidatingTopic || !topic.trim()}
                 style={{
                   width: '100%',
-                  padding: '15px',
-                  backgroundColor: isLoading || !topic.trim() ? '#9ca3af' : '#1e40af',
+                  padding: '16px',
+                  backgroundColor: isLoading || isValidatingTopic ? '#9ca3af' : '#1e3a8a',
                   color: '#fff',
                   border: 'none',
                   borderRadius: 8,
                   fontSize: '18px',
-                  fontWeight: 700,
-                  cursor: isLoading || !topic.trim() ? 'not-allowed' : 'pointer',
-                  letterSpacing: 1
+                  fontWeight: 600,
+                  cursor: isLoading || isValidatingTopic ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 12px rgba(30,58,138,0.3)'
                 }}
               >
-                {isLoading ? 'STARTING DEBATE...' : 'START DEBATE'}
+                {isValidatingTopic ? 'Validating Topic...' : isLoading ? 'Starting Debate...' : 'Start Debate'}
               </button>
-            </div>
 
-            {error && (
-              <div style={{
-                padding: '15px',
-                backgroundColor: '#fee2e2',
-                border: '1px solid #fecaca',
-                borderRadius: 6,
-                color: '#dc2626',
-                textAlign: 'center',
-                fontWeight: 600
-              }}>
-                {error}
-              </div>
-            )}
+              {error && (
+                <div style={{
+                  marginTop: '20px',
+                  padding: '12px',
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: 6,
+                  color: '#dc2626',
+                  textAlign: 'center'
+                }}>
+                  {error}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -383,431 +473,488 @@ const App: React.FC = () => {
   }
 
   // Main Debate Interface
-  if (session) {
-    const rubric = getRubricForRound(session.currentRound);
-
-    return (
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(120deg, #1e3a8a 0%, #3730a3 50%, #1e40af 100%)',
+      fontFamily: 'Segoe UI, Arial, sans-serif'
+    }}>
+      <RubricComponent />
+      
       <div style={{
+        maxWidth: 1400,
+        margin: '0 auto',
+        padding: '20px',
+        background: '#fff',
         minHeight: '100vh',
-        background: 'linear-gradient(120deg, #1e3a8a 0%, #3730a3 50%, #1e40af 100%)',
-        padding: 0,
-        fontFamily: 'Segoe UI, Arial, sans-serif'
+        boxShadow: '0 0 40px rgba(0,0,0,0.15)',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
+        {/* Header */}
         <div style={{
-          maxWidth: 2000,
-          margin: '0 auto',
-          padding: '20px',
-          background: '#fff',
-          minHeight: '100vh',
-          boxShadow: '0 0 40px rgba(0,0,0,0.15)',
-          display: 'flex',
-          flexDirection: 'column'
+          textAlign: 'center',
+          padding: '20px 0',
+          borderBottom: '2px solid #e2e8f0',
+          marginBottom: '20px'
         }}>
-          {/* Header - Full Width */}
-          <div style={{ textAlign: 'center', marginBottom: '30px', width: '100%' }}>
-            <h1 style={{ 
-              fontWeight: 700, 
-              letterSpacing: 1,
-              color: '#1e3a8a',
-              fontSize: '2rem',
-              margin: '0 0 8px 0'
-            }}>
-              DebateAI
-            </h1>
-            <div style={{ 
-              color: '#64748b',
-              fontSize: '1.1rem',
-              fontWeight: 500,
-              margin: '0 0 15px 0'
-            }}>
-              Topic: <strong>{session.topic}</strong> | 
-              Your Position: <strong style={{ color: session.userSide === 'pro' ? '#059669' : '#dc2626' }}>
-                {session.userSide.toUpperCase()}
-              </strong>
-            </div>
-            
-            {/* Round Progress */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
-              {[1, 2, 3, 4].map(round => (
-                <div key={round} style={{
-                  padding: '8px 16px',
-                  borderRadius: 20,
-                  backgroundColor: round === session.currentRound ? '#1e40af' : round < session.currentRound ? '#10b981' : '#e5e7eb',
-                  color: round <= session.currentRound ? '#fff' : '#6b7280',
-                  fontWeight: 600,
-                  fontSize: '0.9rem'
-                }}>
-                  {round}. {getRoundTitle(round)}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Main Content Area */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '30px', 
-            flex: 1,
-            alignItems: 'flex-start'
+          <h1 style={{
+            color: '#1e3a8a',
+            fontSize: '2rem',
+            margin: '0 0 10px 0',
+            fontWeight: 700
           }}>
-            
-            {/* Left side - Debate History + Current Input */}
-            <div style={{ 
-              flex: 1,
+            DebateAI Training Session
+          </h1>
+          <p style={{
+            color: '#64748b',
+            fontSize: '16px',
+            margin: '0 0 10px 0'
+          }}>
+            Topic: "{session.topic}"
+          </p>
+          <p style={{
+            color: '#64748b',
+            fontSize: '14px',
+            margin: 0
+          }}>
+            You are arguing <strong style={{ color: '#0ea5e9' }}>
+              FOR
+            </strong> this topic
+          </p>
+          
+          <button
+            onClick={newDebate}
+            style={{
+              marginTop: '15px',
+              padding: '8px 16px',
+              backgroundColor: '#6b7280',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            New Debate
+          </button>
+        </div>
+
+        {/* Side-by-side debate layout - Always show both sides */}
+        <div style={{
+          flex: 1,
+          minHeight: '600px'
+        }}>
+          {/* Display rounds with side-by-side responses */}
+          {session.rounds.map((round, idx) => (
+            <div key={idx} style={{
               display: 'flex',
-              flexDirection: 'column',
-              minWidth: 0
+              gap: '20px',
+              marginBottom: '20px',
+              minHeight: '120px'
             }}>
-              
-              {/* Debate History */}
-              <div 
-                ref={resultRef}
-                style={{
-                  flex: 1,
-                  overflowY: 'auto',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 8,
-                  padding: '20px',
-                  marginBottom: '20px',
-                  background: '#fafafa',
-                  minHeight: '400px',
-                  maxHeight: '600px'
-                }}
-              >
-                {session.rounds.map((round, index) => (
-                  <div key={index} style={{ marginBottom: '30px' }}>
-                    {/* Round Header */}
+              {/* Pro side response */}
+              <div style={{
+                flex: 1,
+                backgroundColor: '#f0f9ff',
+                border: '2px solid #0ea5e9',
+                borderRadius: '12px',
+                padding: '15px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <div style={{
+                  color: '#0ea5e9',
+                  fontWeight: 700,
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  borderBottom: '1px solid #0ea5e9',
+                  paddingBottom: '6px'
+                }}>
+                  PRO - {getRoundTitle(idx + 1)}
+                </div>
+                
+                {(() => {
+                  // User is always PRO, so PRO response is always user response
+                  const proResponse = round.userResponse;
+                  const proPlayer = 'You';
+                  
+                  return proResponse ? (
                     <div style={{
-                      background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)',
-                      color: '#fff',
-                      padding: '15px 20px',
-                      borderRadius: '8px 8px 0 0',
-                      fontWeight: 700,
-                      fontSize: '1.1rem',
-                      textAlign: 'center'
+                      backgroundColor: '#fff',
+                      border: '1px solid #bae6fd',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      lineHeight: 1.6,
+                      color: '#374151',
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column'
                     }}>
-                      ROUND {index + 1}: {getRoundTitle(index + 1)}
+                      <div style={{
+                        fontSize: '11px',
+                        color: '#0ea5e9',
+                        fontWeight: 600,
+                        marginBottom: '6px'
+                      }}>
+                        {proPlayer}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        {proResponse}
+                      </div>
                     </div>
-
-                    {/* Round Content */}
+                  ) : (
                     <div style={{
-                      border: '2px solid #1e40af',
-                      borderTop: 'none',
-                      borderRadius: '0 0 8px 8px',
-                      overflow: 'hidden'
+                      backgroundColor: '#f8fafc',
+                      border: '1px dashed #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      textAlign: 'center',
+                      color: '#6b7280',
+                      fontStyle: 'italic',
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}>
-                      {/* Human Argument */}
-                      {round.userResponse && (
-                        <div style={{
-                          background: '#dbeafe',
-                          padding: '20px',
-                          borderBottom: round.aiResponse ? '1px solid #93c5fd' : 'none'
-                        }}>
-                          <div style={{ 
-                            fontWeight: 700, 
-                            color: '#1e40af', 
-                            marginBottom: '8px',
-                            fontSize: '1rem'
-                          }}>
-                            YOU ({session.userSide.toUpperCase()}):
-                          </div>
-                          <div style={{ color: '#1e40af', lineHeight: 1.6 }}>
-                            {round.userResponse}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* AI Argument */}
-                      {round.aiResponse && (
-                        <div style={{
-                          background: '#f3e8ff',
-                          padding: '20px'
-                        }}>
-                          <div style={{ 
-                            fontWeight: 700, 
-                            color: '#7c3aed', 
-                            marginBottom: '8px',
-                            fontSize: '1rem'
-                          }}>
-                            AI ({session.userSide === 'pro' ? 'CON' : 'PRO'}):
-                          </div>
-                          <div style={{ color: '#7c3aed', lineHeight: 1.6 }}>
-                            {round.aiResponse}
-                          </div>
-                        </div>
-                      )}
+                      Waiting for your response...
                     </div>
-                  </div>
-                ))}
-
-                {/* Loading indicator */}
-                {isWaitingForAI && (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '20px',
-                    color: '#7c3aed',
-                    fontStyle: 'italic'
-                  }}>
-                    AI is thinking... 🤔
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
-              {/* Current Input Area */}
-              {!session.isComplete && (
+              {/* Con side response */}
+              <div style={{
+                flex: 1,
+                backgroundColor: '#f8fafc',
+                border: '2px solid #64748b',
+                borderRadius: '12px',
+                padding: '15px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
                 <div style={{
-                  border: '2px solid #1e40af',
-                  borderRadius: 8,
-                  padding: '20px',
-                  background: '#fff'
-                }}>
-                  <div style={{ 
-                    marginBottom: '15px',
-                    fontWeight: 700,
-                    color: '#1e40af',
-                    fontSize: '1.1rem'
-                  }}>
-                    ROUND {session.currentRound}: {getRoundTitle(session.currentRound)}
-                  </div>
-                  
-                  <textarea
-                    value={currentInput}
-                    onChange={(e) => setCurrentInput(e.target.value)}
-                    placeholder={`Enter your ${getRoundTitle(session.currentRound).toLowerCase()} argument...`}
-                    disabled={isWaitingForAI}
-                    style={{
-                      width: '100%',
-                      minHeight: '120px',
-                      padding: '15px',
-                      border: '2px solid #d1d5db',
-                      borderRadius: 6,
-                      fontSize: '16px',
-                      resize: 'vertical',
-                      boxSizing: 'border-box',
-                      backgroundColor: isWaitingForAI ? '#f9fafb' : '#fff'
-                    }}
-                  />
-                  
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    marginTop: '15px'
-                  }}>
-                    <button
-                      onClick={newDebate}
-                      style={{
-                        padding: '12px 20px',
-                        backgroundColor: '#6b7280',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      New Debate
-                    </button>
-                    
-                    <button
-                      onClick={submitArgument}
-                      disabled={!currentInput.trim() || isWaitingForAI}
-                      style={{
-                        padding: '12px 25px',
-                        backgroundColor: !currentInput.trim() || isWaitingForAI ? '#9ca3af' : '#1e40af',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        fontWeight: 700,
-                        cursor: !currentInput.trim() || isWaitingForAI ? 'not-allowed' : 'pointer',
-                        fontSize: '16px'
-                      }}
-                    >
-                      {isWaitingForAI ? 'Please wait...' : 'Submit Argument'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Completion message */}
-              {session.isComplete && (
-                <div style={{
-                  textAlign: 'center',
-                  padding: '30px',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: '#fff',
-                  borderRadius: 8,
+                  color: '#64748b',
                   fontWeight: 700,
-                  fontSize: '1.2rem'
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  borderBottom: '1px solid #64748b',
+                  paddingBottom: '6px'
                 }}>
-                  🎉 Debate Complete! Great job working through all 4 rounds!
-                  <br />
-                  <button
-                    onClick={newDebate}
-                    style={{
-                      marginTop: '15px',
-                      padding: '12px 25px',
+                  CON - {getRoundTitle(idx + 1)}
+                </div>
+                
+                {(() => {
+                  // User is always PRO, so CON response is always AI response
+                  const conResponse = round.aiResponse;
+                  const conPlayer = 'AI';
+                  
+                  return conResponse ? (
+                    <div style={{
                       backgroundColor: '#fff',
-                      color: '#059669',
-                      border: 'none',
-                      borderRadius: 6,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      fontSize: '16px'
-                    }}
-                  >
-                    Start New Debate
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Right side - Rubric */}
-            <div style={{ 
-              flex: '0 0 350px',
-              minWidth: '350px',
-              background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)',
-              color: '#fff',
-              padding: '20px',
-              boxShadow: '0 4px 16px rgba(30,58,138,0.3)',
-              overflowY: 'auto',
-              height: 'fit-content',
-              borderRadius: 8
-            }}>
-              {session.isComplete && (session as any).finalGrading ? (
-                <div>
-                  <h3 style={{ 
-                    margin: '0 0 20px 0', 
-                    fontSize: '1.3rem', 
-                    fontWeight: 700,
-                    color: '#fbbf24',
-                    textAlign: 'center'
-                  }}>
-                    🏆 FINAL GRADING
-                  </h3>
-                  
-                  <div style={{ fontSize: '0.9rem', lineHeight: '1.5' }}>
-                    <div style={{ marginBottom: '15px' }}>
-                      <div style={{ 
-                        background: 'rgba(251,191,36,0.2)', 
-                        padding: '10px', 
-                        borderRadius: 6, 
-                        marginBottom: 8,
-                        border: '1px solid #fbbf24'
-                      }}>
-                        <strong style={{ color: '#fbbf24' }}>
-                          Constructive: {(session as any).finalGrading.constructive?.subtotal || 0}/30 (30%)
-                        </strong>
-                      </div>
-                    </div>
-                    
-                    <div style={{ marginBottom: '15px' }}>
-                      <div style={{ 
-                        background: 'rgba(251,191,36,0.2)', 
-                        padding: '10px', 
-                        borderRadius: 6, 
-                        marginBottom: 8,
-                        border: '1px solid #fbbf24'
-                      }}>
-                        <strong style={{ color: '#fbbf24' }}>
-                          Cross-Ex: {(session as any).finalGrading.crossEx?.subtotal || 0}/10 (10%)
-                        </strong>
-                      </div>
-                    </div>
-                    
-                    <div style={{ marginBottom: '15px' }}>
-                      <div style={{ 
-                        background: 'rgba(251,191,36,0.2)', 
-                        padding: '10px', 
-                        borderRadius: 6, 
-                        marginBottom: 8,
-                        border: '1px solid #fbbf24'
-                      }}>
-                        <strong style={{ color: '#fbbf24' }}>
-                          Rebuttal: {(session as any).finalGrading.rebuttal?.subtotal || 0}/35 (35%)
-                        </strong>
-                      </div>
-                    </div>
-                    
-                    <div style={{ marginBottom: '20px' }}>
-                      <div style={{ 
-                        background: 'rgba(251,191,36,0.2)', 
-                        padding: '10px', 
-                        borderRadius: 6, 
-                        marginBottom: 8,
-                        border: '1px solid #fbbf24'
-                      }}>
-                        <strong style={{ color: '#fbbf24' }}>
-                          Closing: {(session as any).finalGrading.closing?.subtotal || 0}/25 (25%)
-                        </strong>
-                      </div>
-                    </div>
-                    
-                    <div style={{ 
-                      background: 'rgba(34,197,94,0.2)', 
-                      padding: '15px', 
-                      borderRadius: 8, 
-                      border: '2px solid #22c55e',
-                      textAlign: 'center'
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      lineHeight: 1.6,
+                      color: '#374151',
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column'
                     }}>
-                      <strong style={{ color: '#22c55e', fontSize: '1.2rem' }}>
-                        TOTAL SCORE: {(session as any).finalGrading.finalScore || 0}/100
-                      </strong>
+                      <div style={{
+                        fontSize: '11px',
+                        color: '#64748b',
+                        fontWeight: 600,
+                        marginBottom: '6px'
+                      }}>
+                        {conPlayer}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        {conResponse}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div style={{
+                      backgroundColor: '#f8fafc',
+                      border: '1px dashed #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      textAlign: 'center',
+                      color: '#6b7280',
+                      fontStyle: 'italic',
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      Waiting for AI response...
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          ))}
+
+          {/* Current round input - appears in the exact position where the response will show */}
+          {!session.isComplete && (
+            <div style={{
+              display: 'flex',
+              gap: '20px',
+              marginBottom: '20px',
+              minHeight: '120px'
+            }}>
+              {/* Pro side - input or placeholder */}
+              <div style={{
+                flex: 1,
+                backgroundColor: '#f0f9ff',
+                border: '2px solid #0ea5e9',
+                borderRadius: '12px',
+                padding: '15px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <div style={{
+                  color: '#0ea5e9',
+                  fontWeight: 700,
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  borderBottom: '1px solid #0ea5e9',
+                  paddingBottom: '6px'
+                }}>
+                  PRO - {getRoundTitle(session.currentRound)}
                 </div>
-              ) : (
-                <div>
-                  <h3 style={{ 
-                    margin: '0 0 10px 0', 
-                    fontSize: '1.2rem', 
-                    fontWeight: 700,
-                    color: '#fbbf24',
-                    textAlign: 'center'
-                  }}>
-                    ROUND {session.currentRound}: {rubric.title}
-                  </h3>
-                  
-                  <p style={{ 
-                    margin: '0 0 20px 0', 
-                    fontSize: '1rem', 
-                    fontWeight: 700,
-                    color: '#fbbf24',
-                    textAlign: 'center'
-                  }}>
-                    Total: {rubric.totalPoints} Points ({rubric.weight}% of final grade)
-                  </p>
-                  
-                  <div style={{ fontSize: '0.9rem', lineHeight: '1.5' }}>
-                    {rubric.criteria.map((criterion, index) => (
-                      <div key={index} style={{ marginBottom: '20px' }}>
-                        <div style={{ 
-                          background: 'rgba(251,191,36,0.2)', 
-                          padding: '10px', 
-                          borderRadius: 6, 
-                          marginBottom: 10,
-                          border: '1px solid #fbbf24'
+                
+                {/* User is always PRO */}
+                {(() => {
+                  const currentRound = session.rounds[session.currentRound - 1];
+                  return currentRound?.userResponse ? (
+                      // Show submitted response
+                      <div style={{
+                        backgroundColor: '#fff',
+                        border: '1px solid #bae6fd',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        lineHeight: 1.6,
+                        color: '#374151',
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }}>
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#0ea5e9',
+                          fontWeight: 600,
+                          marginBottom: '6px'
                         }}>
-                          <strong style={{ color: '#fbbf24' }}>
-                            {criterion.name} ({criterion.points})
-                          </strong>
+                          You
                         </div>
-                        <div style={{ paddingLeft: '10px', marginBottom: '12px' }}>
-                          {criterion.description}
+                        <div style={{ flex: 1 }}>
+                          {currentRound.userResponse}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    ) : !isWaitingForAI ? (
+                      // Show input
+                      <div style={{
+                        backgroundColor: '#fff',
+                        border: '2px solid #0ea5e9',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }}>
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#0ea5e9',
+                          fontWeight: 600,
+                          marginBottom: '6px'
+                        }}>
+                          Your Turn
+                        </div>
+                        
+                        <textarea
+                          value={currentInput}
+                          onChange={(e) => setCurrentInput(e.target.value)}
+                          placeholder={`Enter your ${getRoundTitle(session.currentRound).toLowerCase()} argument...`}
+                          style={{
+                            width: '100%',
+                            minHeight: '80px',
+                            padding: '8px',
+                            borderRadius: 4,
+                            border: '1px solid #d1d5db',
+                            fontSize: '14px',
+                            lineHeight: 1.5,
+                            resize: 'vertical',
+                            boxSizing: 'border-box',
+                            fontFamily: 'inherit',
+                            flex: 1
+                          }}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && e.ctrlKey) {
+                              submitArgument();
+                            }
+                          }}
+                        />
+                        
+                        <div style={{
+                          marginTop: '8px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                            Ctrl+Enter to submit
+                          </div>
+                          
+                          <button
+                            onClick={submitArgument}
+                            disabled={!currentInput.trim()}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: currentInput.trim() ? '#0ea5e9' : '#9ca3af',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 4,
+                              cursor: currentInput.trim() ? 'pointer' : 'not-allowed',
+                              fontWeight: 600,
+                              fontSize: '12px'
+                            }}
+                          >
+                            Submit
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // Show waiting state
+                      <div style={{
+                        backgroundColor: '#f8fafc',
+                        border: '1px dashed #cbd5e1',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        textAlign: 'center',
+                        color: '#6b7280',
+                        fontStyle: 'italic',
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        Processing your response...
+                      </div>
+                    );
+                  })()}
+              </div>
+
+              {/* Con side - input or placeholder */}
+              <div style={{
+                flex: 1,
+                backgroundColor: '#f8fafc',
+                border: '2px solid #64748b',
+                borderRadius: '12px',
+                padding: '15px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <div style={{
+                  color: '#64748b',
+                  fontWeight: 700,
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  borderBottom: '1px solid #64748b',
+                  paddingBottom: '6px'
+                }}>
+                  CON - {getRoundTitle(session.currentRound)}
                 </div>
-              )}
+                
+                {/* AI is always CON - show waiting for response */}
+                <div style={{
+                  backgroundColor: '#f8fafc',
+                  border: '1px dashed #cbd5e1',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  textAlign: 'center',
+                  color: '#6b7280',
+                  fontStyle: 'italic',
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  Waiting for your response...
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Status messages for waiting/complete states */}
+        {session.isComplete ? (
+          <div style={{
+            marginTop: '20px',
+            textAlign: 'center',
+            padding: '20px',
+            backgroundColor: '#fef3c7',
+            borderRadius: '8px',
+            border: '2px solid #f59e0b'
+          }}>
+            <h3 style={{ color: '#92400e', margin: '0 0 10px 0' }}>
+              🎉 Debate Complete!
+            </h3>
+            <p style={{ color: '#92400e', margin: '0 0 15px 0' }}>
+              Great job completing all {session.rounds.length} rounds of debate!
+            </p>
+            <button
+              onClick={newDebate}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#1e3a8a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '16px'
+              }}
+            >
+              Start New Debate
+            </button>
+          </div>
+        ) : isWaitingForAI ? (
+          <div style={{
+            marginTop: '20px',
+            textAlign: 'center',
+            padding: '20px',
+            color: '#6b7280'
+          }}>
+            <div style={{ fontSize: '18px', marginBottom: '10px' }}>
+              🤖 AI is preparing response...
+            </div>
+            <div style={{ fontSize: '14px' }}>
+              Round {session.currentRound}: {getRoundTitle(session.currentRound)}
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
+        ) : null}
 
-  return null;
-}
+        {error && (
+          <div style={{
+            marginTop: '20px',
+            padding: '15px',
+            backgroundColor: '#fee2e2',
+            border: '1px solid #fca5a5',
+            borderRadius: 8,
+            color: '#dc2626',
+            textAlign: 'center'
+          }}>
+            {error}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default App;

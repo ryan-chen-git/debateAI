@@ -5,6 +5,8 @@ import { GradingData, DebateRound, RUBRICS } from './types';
 export class GeminiService {
     private genAI: GoogleGenerativeAI | null = null;
     private model: any = null;
+    private validatorChat: any = null;
+    private validatorChatId: string | null = null;
 
     constructor() {
         const apiKey = process.env.GEMINI_API_KEY;
@@ -31,6 +33,95 @@ export class GeminiService {
         }
     }
 
+    async prepareTopicValidator(): Promise<{
+        success: boolean;
+        conversationId?: string;
+        preparationTime?: number;
+        error?: string;
+    }> {
+        const startTime = Date.now();
+        
+        logger.log('INFO', 'backend', '🔄 Preparing Gemini AI for topic validation...');
+
+        // Fallback if no Gemini API
+        if (!this.genAI || !this.model) {
+            logger.log('WARN', 'backend', 'No Gemini API available - validation will use fallback');
+            return {
+                success: false,
+                error: 'No Gemini API available'
+            };
+        }
+
+        try {
+            // Start a chat session with the validation instructions
+            this.validatorChat = this.model.startChat({
+                history: [
+                    {
+                        role: "user",
+                        parts: [{
+                            text: `You are a debate topic validator and refiner. I will send you debate topics to validate. For each topic, you should return JSON with this exact structure:
+
+{
+  "valid": boolean,
+  "reason": "explanation of why it's valid/invalid",
+  "refinedTopic": "improved version if needed",
+  "suggestedRewrite": "alternative phrasing if helpful"
+}
+
+Guidelines:
+- A topic is VALID as long as it can be argued *for or against* in some way.
+- It does not matter if the topic is offensive, sensitive, one-sided, unfair, or silly — if it's debatable, it counts as valid.
+- INVALID topics are only those that cannot be argued (e.g. pure facts, gibberish, or completely incoherent strings).
+- Always suggest improvements or clearer wording when possible.
+- Keep refinedTopic concise and clear.
+- Make suggestedRewrite more engaging or polished, but still preserve the original intent.
+
+Are you ready to validate debate topics? Just respond with "Ready" if you understand.`
+                        }]
+                    }
+                ],
+                generationConfig: {
+                    maxOutputTokens: 200,
+                    temperature: 0.3,
+                },
+            });
+
+            // Get the initial "Ready" response to establish the conversation
+            const result = await this.validatorChat.sendMessage("Please confirm you're ready to validate debate topics.");
+            const response = await result.response;
+            const readyText = response.text().toLowerCase();
+
+            if (readyText.includes('ready') || readyText.includes('understand')) {
+                this.validatorChatId = `validator_${Date.now()}`;
+                const preparationTime = Date.now() - startTime;
+                
+                logger.log('INFO', 'backend', '✅ Gemini AI validator prepared successfully!', {
+                    conversationId: this.validatorChatId,
+                    preparationTime: `${preparationTime}ms`,
+                    aiResponse: readyText.substring(0, 50) + '...'
+                });
+
+                return {
+                    success: true,
+                    conversationId: this.validatorChatId,
+                    preparationTime
+                };
+            } else {
+                throw new Error('AI did not confirm readiness properly');
+            }
+
+        } catch (error) {
+            logger.logError('backend', error as Error, { context: 'validator-preparation' });
+            this.validatorChat = null;
+            this.validatorChatId = null;
+            
+            return {
+                success: false,
+                error: (error as Error).message
+            };
+        }
+    }
+
     async validateTopic(topic: string): Promise<{ 
         valid: boolean; 
         reason: string; 
@@ -38,13 +129,60 @@ export class GeminiService {
         suggestedRewrite?: string; 
         usedFallback?: boolean 
     }> {
-        logger.log('INFO', 'backend', 'Validating topic with Gemini', { topic: topic.substring(0, 50) + '...' });
+        const validationStart = Date.now();
+        logger.log('INFO', 'backend', '🔍 Starting topic validation', { 
+            topic: topic.substring(0, 50) + '...',
+            hasPreparedChat: !!this.validatorChat,
+            chatId: this.validatorChatId
+        });
+
+        // Try to use prepared chat first for fastest response
+        if (this.validatorChat && this.validatorChatId) {
+            try {
+                logger.log('INFO', 'backend', '⚡ Using prepared chat for FAST validation...');
+                
+                const result = await this.validatorChat.sendMessage(topic);
+                const response = await result.response;
+                const text = response.text();
+                
+                const validationTime = Date.now() - validationStart;
+                logger.log('INFO', 'backend', '✅ FAST validation completed!', {
+                    validationTime: `${validationTime}ms`,
+                    responseLength: text.length,
+                    chatId: this.validatorChatId
+                });
+
+                // Parse JSON response
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const validationResult = JSON.parse(jsonMatch[0]);
+                    return {
+                        valid: validationResult.valid,
+                        reason: validationResult.reason,
+                        refinedTopic: validationResult.refinedTopic,
+                        suggestedRewrite: validationResult.suggestedRewrite
+                    };
+                } else {
+                    throw new Error('No JSON found in fast validation response');
+                }
+            } catch (error) {
+                logger.log('WARN', 'backend', '⚠️ Fast validation failed, falling back to regular validation', {
+                    error: (error as Error).message
+                });
+                // Reset chat session since it failed
+                this.validatorChat = null;
+                this.validatorChatId = null;
+            }
+        }
 
         // Fallback if no Gemini API
         if (!this.genAI || !this.model) {
+            logger.log('INFO', 'backend', '📋 Using fallback validation (no API)');
             return this.generateFallbackTopicValidation(topic);
         }
 
+        // Regular validation (slower but reliable)
+        logger.log('INFO', 'backend', '🐌 Using regular validation (slower)...');
         try {
             const prompt = `You are a debate topic validator and refiner. Given USER_INPUT, return JSON.
 
@@ -155,15 +293,16 @@ USER_INPUT: "${topic}"
         wordLimit: number = 180
     ): Promise<{ success: boolean; argument?: string; error?: string }> {
         
-        // Determine the AI's opposing side
-        const aiSide = userSide === 'pro' ? 'con' : 'pro';
-        const aiPosition = aiSide === 'pro' ? 'supporting' : 'opposing';
-        const userPosition = userSide === 'pro' ? 'supporting' : 'opposing';
+        // AI is always CON (opposing), user is always PRO (supporting)
+        // Note: keeping userSide parameter for backward compatibility but AI is always opposing
+        const aiSide = 'con';
+        const aiPosition = 'opposing';
+        const userPosition = 'supporting';
 
         logger.log('INFO', 'backend', 'Generating counter-argument', {
             topic,
-            userSide,
-            aiSide,
+            aiSide: 'con (always opposing)',
+            userSide: 'pro (always supporting)',
             userArgumentLength: userArgument.length
         });
 
@@ -178,17 +317,31 @@ USER_INPUT: "${topic}"
 The other student is ${userPosition} this topic and just said:
 "${userArgument}"
 
-Now it's your turn to argue ${aiPosition} this topic. You need to counter their points, but write like a smart high schooler would - casual but still making good arguments.
+Now it's your turn to argue ${aiPosition} this topic. You need to counter their points and MATCH THEIR TONE, ENERGY LEVEL, AND RESPONSE LENGTH.
+
+TONE & LENGTH ANALYSIS: First, analyze how they're talking:
+- If they're casual and relaxed → be casual back
+- If they're passionate and intense → match that energy  
+- If they're formal and academic → be more serious
+- If they're using slang or being super casual → use similar language
+- If they're being aggressive or sassy → match that vibe
+- If they're being polite and respectful → be respectful too
+- RESPONSE LENGTH: Match their word count roughly - if they wrote ${this.getWordCount(userArgument)} words, aim for a similar length (±20 words)
 
 IMPORTANT: If their response is complete gibberish, nonsense, off-topic, or just random words/characters, call them out on it! Say something like "Uh... that makes no sense at all" or "Did you even read the topic?" or "That's just word salad, dude."
 
 Your response should:
-1. If their argument is coherent: Challenge what they just said with your own points
-2. If their argument is gibberish: Call them out and maybe make a real argument anyway
-3. Be around ${wordLimit} words or less
-4. Sound like a confident high school debater - casual, maybe a bit sassy, but still logical
-5. Use phrases like "Actually..." "But here's the thing..." "That's not really true because..." etc.
-6. Don't be too formal or academic - keep it real
+1. MATCH their tone, energy level, and approximate word count
+2. If their argument is coherent: Challenge what they just said with your own points
+3. If their argument is gibberish: Call them out and maybe make a real argument anyway
+4. Be around ${Math.max(Math.min(this.getWordCount(userArgument) + 20, wordLimit), 50)} words (matching their length but staying under ${wordLimit})
+5. Mirror their communication style - if they say "like" a lot, you can too; if they're formal, be formal
+6. Use similar sentence structures and vocabulary level as them
+
+Examples:
+- If they say "This is totally wrong because..." → You might say "Actually, that's totally not true because..."
+- If they say "The evidence clearly demonstrates..." → You might say "However, the research actually shows..."
+- If they say "Bruh this is so dumb..." → You might say "Nah dude, you're missing the point..."
 
 Just write your counter-argument, nothing else.`;
 
@@ -371,17 +524,121 @@ Just write your counter-argument, nothing else.`;
         return truncated + '...';
     }
 
+    async generateConstructiveArgumentWithToneMatching(
+        topic: string,
+        aiSide: 'pro' | 'con',
+        userToneReference: string,
+        wordLimit: number = 180
+    ): Promise<{ success: boolean; argument?: string; error?: string }> {
+        
+        // AI is always CON (opposing)
+        // Note: keeping aiSide parameter for backward compatibility but AI is always opposing
+        const aiPosition = 'opposing';
+
+        logger.log('INFO', 'backend', 'Generating AI constructive argument with tone matching', {
+            topic,
+            aiSide: 'con (always opposing)',
+            aiPosition,
+            userToneReferenceLength: userToneReference.length
+        });
+
+        // Fallback if no Gemini API
+        if (!this.genAI || !this.model) {
+            return this.generateFallbackConstructiveArgument(topic, aiSide, wordLimit);
+        }
+
+        try {
+            const prompt = `You are a high school student in a debate about: "${topic}"
+
+You're arguing AGAINST this topic (opposing position). This is your opening constructive argument where you build your case from scratch.
+
+TONE MATCHING: The other student already made their argument with this tone/style:
+"${userToneReference}"
+
+Analyze their communication style and MATCH their tone, energy, and formality level:
+- If they're casual and relaxed → be casual back
+- If they're passionate and intense → match that energy  
+- If they're formal and academic → be more serious
+- If they're using slang or being super casual → use similar language
+- If they're being aggressive or confident → match that vibe
+- If they're being polite and respectful → be respectful too
+- RESPONSE LENGTH: Match their word count roughly - if they wrote ${this.getWordCount(userToneReference)} words, aim for a similar length (±20 words)
+
+Write your constructive argument like they would write it:
+1. Start strong with your main point against the topic (matching their style)
+2. Give 2-3 solid reasons why you're right to oppose it  
+3. Use examples that make sense to teenagers
+4. Match their vocabulary level and sentence structure
+5. Be around ${Math.max(Math.min(this.getWordCount(userToneReference) + 20, wordLimit), 50)} words (matching their length but staying under ${wordLimit})
+6. Mirror their energy level - if they're excited, be excited; if they're calm, be calm
+
+This is your independent argument AGAINST the topic - don't reference what they said, just make your own case in their style.
+
+Just write your argument, nothing else.`;
+
+            logger.log('DEBUG', 'backend', 'Calling Gemini for tone-matched constructive argument generation');
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const constructiveArgument = response.text().trim();
+            
+            logger.log('DEBUG', 'backend', 'Gemini tone-matched constructive argument raw response', {
+                responseLength: constructiveArgument.length,
+                responsePreview: constructiveArgument.substring(0, 100) + '...'
+            });
+
+            // Validate word count
+            const wordCount = this.getWordCount(constructiveArgument);
+            if (wordCount > wordLimit) {
+                logger.log('WARN', 'backend', 'Gemini tone-matched constructive response exceeds word limit', { 
+                    wordCount, 
+                    wordLimit 
+                });
+                
+                // Try to truncate intelligently
+                const truncated = this.truncateToWordLimit(constructiveArgument, wordLimit);
+                logger.log('INFO', 'backend', 'Truncated Gemini tone-matched constructive response to fit word limit');
+                
+                return {
+                    success: true,
+                    argument: truncated
+                };
+            }
+
+            logger.log('INFO', 'backend', 'Tone-matched constructive argument generated successfully', {
+                wordCount,
+                wordLimit
+            });
+
+            return {
+                success: true,
+                argument: constructiveArgument
+            };
+
+        } catch (error: any) {
+            logger.logError('backend', error as Error, { 
+                context: 'gemini-tone-matched-constructive-argument',
+                topic,
+                aiSide 
+            });
+
+            // Fallback on error
+            return this.generateFallbackConstructiveArgument(topic, aiSide, wordLimit);
+        }
+    }
+
     async generateConstructiveArgument(
         topic: string,
         aiSide: 'pro' | 'con',
         wordLimit: number = 180
     ): Promise<{ success: boolean; argument?: string; error?: string }> {
         
-        const aiPosition = aiSide === 'pro' ? 'supporting' : 'opposing';
+        // AI is always CON (opposing)
+        // Note: keeping aiSide parameter for backward compatibility but AI is always opposing
+        const aiPosition = 'opposing';
 
         logger.log('INFO', 'backend', 'Generating AI constructive argument', {
             topic,
-            aiSide,
+            aiSide: 'con (always opposing)',
             aiPosition
         });
 
@@ -393,15 +650,17 @@ Just write your counter-argument, nothing else.`;
         try {
             const prompt = `You are a high school student in a debate about: "${topic}"
 
-You're arguing ${aiPosition} this topic. This is your opening argument where you build your case from scratch.
+You're arguing AGAINST this topic (opposing position). This is your opening argument where you build your case from scratch.
 
-Write your constructive argument like a smart, confident high schooler would:
-1. Start strong with your main point
-2. Give 2-3 solid reasons why you're right  
+Since you're going first and setting the tone, be CASUAL and CHILL. Write your constructive argument like a smart, confident high schooler would:
+1. Start strong with your main point against the topic
+2. Give 2-3 solid reasons why you're right to oppose it
 3. Use examples that make sense to teenagers
 4. Keep it around ${wordLimit} words
-5. Sound casual but smart - like "Okay, here's why this makes total sense..." or "Look, the main issue is..."
+5. Sound casual but smart - like "Okay, here's why this makes total sense..." or "Look, the main issue is..." or "So basically..."
 6. Don't be super formal - just be convincing and relatable
+7. Use casual language like "totally," "actually," "honestly," "like," etc.
+8. Be confident but not aggressive - more like explaining to a friend
 
 This isn't responding to anyone else - you're making your own case. Just write your argument, nothing else.`;
 
